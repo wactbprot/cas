@@ -3,6 +3,7 @@
             [buddy.auth.backends.session :refer [session-backend]]
             [buddy.auth.middleware :refer [wrap-authentication wrap-authorization]]
             [buddy.hashers :as hashers]
+            [clj-http.client :as http]
             [clojure.java.io :as io]
             [compojure.core :refer [defroutes context GET POST]]
             [ring.adapter.jetty :refer [run-jetty]]
@@ -16,6 +17,13 @@
 
 (def userstore (atom {})) ;; <- couchdb
 
+;; create new user in couchdb
+;; curl -X PUT http://localhost:5984/_users/org.couchdb.user:jan \
+;;      -H "Accept: application/json" \
+;;      -H "Content-Type: application/json" \
+;;      -d '{"name": "jan", "password": "apple", "roles": [], "type": "user"}'
+
+
 (defn create-user! [user]
   (let [password (:password user)
         user-id (uuid)]
@@ -28,7 +36,6 @@
   (get @userstore user-id))
 
 (defn get-user-by-username-and-password [username password]
-  (prn username password)
   (reduce (fn [_ user]
             (if (and (= (:username user) username)
                      (hashers/check password (:password-hash user)))
@@ -41,6 +48,7 @@
   (slurp (io/resource "public/admin.html")))
 
 (defn get-login [req]
+  ;; http://localhost:5984/vl_db/_design/ccas/login.html
   (slurp (io/resource "public/login.html")))
 
 (defn post-login [{{username "username" password "password"} :form-params
