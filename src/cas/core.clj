@@ -15,23 +15,31 @@
 
 (defonce system (atom {}))
 
-(def config {:db/couch {:opts
-                        {:basic-auth [(System/getenv "CAL_USR") (System/getenv "CAL_PWD")]
-                         ;; :body "{\"json\": \"input\"}"
-                         :headers {"X-Api-Version" "2"}
-                         :content-type :json
-                         :socket-timeout 1000      ;; in milliseconds
-                         :connection-timeout 1000  ;; in milliseconds
-                         :accept :json
-                         :query-params {}
-                         :pool {:threads 1 :default-per-route 1}}
+(def config {:db/couch {:opts {:basic-auth [(System/getenv "CAL_USR") (System/getenv "CAL_PWD")]
+                               ;; :body "{\"json\": \"input\"}"
+                               :headers {"X-Api-Version" "2"}
+                               :content-type :json
+                               :socket-timeout 1000      ;; in milliseconds
+                               :connection-timeout 1000  ;; in milliseconds
+                               :accept :json
+                               :query-params {}
+                               :pool {:threads 1 :default-per-route 1}}
                         :prot "http"
                         :host "localhost"
                         :port 5984}
 
+             :get/login {:db (ig/ref :db/couch)
+                         :path "vl_db/_design/ccas/login.html"}
+             
+             :routes/all {:get-login (ig/ref :get/login)}
+
+             :server/app {:routes (ig/ref :routes/all)
+                          :backend (session-backend)}
+             
              :server/jetty {:opts {:port 8080
                                    :join? false}
-                            :backend (session-backend)}})
+                            
+                            :app (ig/ref :server/app)}})
 
 ;; https://github.com/adambard/buddy-test/blob/master/src/buddy_test/app.clj
 
@@ -69,10 +77,6 @@
 (defn get-admin [req]
   (slurp (io/resource "public/admin.html")))
 
-(defn get-login [req]
-  ;; http://localhost:5984/vl_db/_design/ccas/login.html
-  (slurp (io/resource "public/login.html")))
-
 (defn post-login [{{username "username" password "password"} :form-params
                    session :session :as req}]
   (if-let [user (get-user-by-username-and-password username password)]
@@ -94,32 +98,36 @@
 (defroutes admin-routes
   (GET "/" [] get-admin))
 
-(defroutes all-routes
-  (context "/admin" []
-    (restrict admin-routes {:handler identity}))
-  (GET "/" [] get-index)
-  (GET "/login/" [] get-login)
-  (POST "/login/" [] post-login)
-  (POST "/logout/" [] post-logout))
-
-(comment
-  (defn -main []
-                                        ; Init admin user
-    (create-user! {:username "admin" :password "1234"})
-    ( my-app {:port 8080})))
-
 
 (defmethod ig/init-key :db/couch [_ {:keys [prot host port] :as conf}]
-  (assoc conf :url (str prot "://" host ":" port "/")))
+  (assoc conf :srv (str prot "://" host ":" port "/")))
 
-(defmethod ig/init-key :server/jetty [_ {:keys [opts backend]}]
-  (run-jetty (-> #'all-routes
-                 (wrap-user)
-                 (wrap-authentication backend)
-                 (wrap-authorization backend)
-                 (wrap-session)
-                 (wrap-params))
-             opts))
+
+(defmethod ig/init-key :get/login [_ {:keys [path db]}]
+  (fn [req]
+    (prn "call")
+    (let [{srv :srv opts :opts} db]
+      (-> (http/get (str srv path) opts) :body))))
+
+(defmethod ig/init-key :routes/all [_ {:keys [ini get-login] :as conf}]
+  (defroutes all-routes
+    (context "/admin" []
+             (restrict admin-routes {:handler identity}))
+    (GET "/" [] get-index)
+    (GET "/login/" [] get-login)
+    (POST "/login/" [] post-login)
+    (POST "/logout/" [] post-logout)))
+
+(defmethod ig/init-key :server/app [_ {:keys [backend routes]}]
+  (-> routes
+      (wrap-user)
+      (wrap-authentication backend)
+      (wrap-authorization backend)
+      (wrap-session)
+      (wrap-params)))
+
+(defmethod ig/init-key :server/jetty [_ {:keys [opts app]}]
+  (run-jetty app  opts))
 
 (defmethod ig/halt-key! :server/jetty [_ server]
   (.stop server))
@@ -131,12 +139,16 @@
   (ig/halt! @system)
   (reset! system {}))
 
+(defn app [] (-> system deref :server/app))
 
 (comment
-
-  (run-jetty #'my-app {:port 8080 :join? false})
-  (my-app {:request-method :post :uri "/login/" :body "username=admin&password=1234"})
-
-  (my-app {:request-method :get :uri "/admin/"
+  ((app) {:request-method :post :uri "/login/" :body "username=admin&password=1234"})
+  ((app) {:request-method :get :uri "/admin/"
            :headers {"cookie" "ring-session=5c39d06a-156d-401f-ae1c-f86a2ca717d6"}
            }))
+
+(comment
+  (defn -main []
+                                        ; Init admin user
+    (create-user! {:username "admin" :password "1234"})
+    ( my-app {:port 8080})))
