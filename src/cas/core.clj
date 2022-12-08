@@ -1,4 +1,4 @@
-(ns ccas.core
+(ns cas.core
   (:require [buddy.auth.accessrules :refer [restrict]]
             [buddy.auth.backends.session :refer [session-backend]]
             [buddy.auth.middleware :refer [wrap-authentication wrap-authorization]]
@@ -15,15 +15,19 @@
             [ring.middleware.params :refer [wrap-params]]
             [ring.util.response :refer [response redirect]]))
 
+;; # System
 
+;; The entire system is stored in an atom filled
+;; by [integrant](https://github.com/weavejester/integrant)
 (defonce system (atom {}))
 
+;; System `config`uration map.
 (def config {:db/couch {:opts {:basic-auth [(System/getenv "CAL_USR") (System/getenv "CAL_PWD")]
                                ;; :body "{\"json\": \"input\"}"
                                :headers {"X-Api-Version" "2"}
                                :content-type :json
-                               :socket-timeout 1000      ;; in milliseconds
-                               :connection-timeout 1000  ;; in milliseconds
+                               :socket-timeout 1000
+                               :connection-timeout 1000
                                :accept :json
                                :query-params {}
                                :pool {:threads 1 :default-per-route 1}}
@@ -57,18 +61,27 @@
                             
                             :app (ig/ref :server/app)}})
 
+;; Application base is/was:
 ;; https://github.com/adambard/buddy-test/blob/master/src/buddy_test/app.clj
 
 (defn uuid [] (java.util.UUID/randomUUID))
 
-(def userstore (atom {})) ;; <- couchdb
+;; ## rerister
 
-;; create new user in couchdb
+;; The register process generates a user in the CouchDB `_users` database.
+                                        
+;; ```shell
 ;; curl -X PUT http://localhost:5984/_users/org.couchdb.user:jan \
 ;;      -H "Accept: application/json" \
 ;;      -H "Content-Type: application/json" \
 ;;      -d '{"name": "jan", "password": "apple", "roles": [], "type": "user"}'
+;; ```
 
+(defn get-allowed-users [{:keys [srv opts] :as db} path]
+  (-> (http/get (str srv path) opts)
+      :body
+      (json/read-str :key-fn keyword)
+      :Maintainers))
 
 (defn create-user! [user]
   (let [password (:password user)
@@ -87,6 +100,9 @@
                      (hashers/check password (:password-hash user)))
               (reduced user))) (vals @userstore)))
 
+;; ## login
+
+;; Redirect to `/index/` (success) or `/login/` (fail) after login data are posted.
 (defn post-login [{{username "username" password "password"} :form-params session :session :as req}]
   (if-let [user (get-user-by-username-and-password username password)]
     (assoc (redirect "/index/")
@@ -100,12 +116,6 @@
 (defn wrap-user [handler]
   (fn [{user-id :identity :as req}]
     (handler (assoc req :user (get-user user-id)))))
-
-(defn get-allowed-users [{:keys [srv opts] :as db} path]
-  (-> (http/get (str srv path) opts)
-      :body
-      (json/read-str :key-fn keyword)
-      :Maintainers))
 
 (defn user-allowed? [vec-of-maps key value]
   (->> vec-of-maps
@@ -144,7 +154,7 @@
   (fn [req]
     (if-not (authenticated? req)
       (throw-unauthorized)
-      (str "<h1>hello auth</h1>" path))))
+      (str "<h1>hello app</h1>" path))))
 
 (defmethod ig/init-key :routes/app [_ {:keys [get-login get-index get-register post-register] :as conf}]
   (defroutes all-routes
@@ -165,15 +175,16 @@
       (wrap-params)))
 
 ;; ## system down
+
 (defmethod ig/init-key :server/jetty [_ {:keys [opts app]}]
-  (run-jetty app  opts))
+  (run-jetty app opts))
 
 (defmethod ig/halt-key! :server/jetty [_ server]
   (.stop server))
 
 ;; ## start stop
-(defn start []
-  (keys (reset! system (ig/init config))))
+
+(defn start [] (keys (reset! system (ig/init config))))
 
 (defn stop []
   (ig/halt! @system)
@@ -182,7 +193,6 @@
 ;; ## helper functions
 
 (defn app [] (-> system deref :server/app))
-
 
 ;; ## playground
 (comment

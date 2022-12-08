@@ -1,4 +1,4 @@
-clojure couch [access|auth] [server|service]
+[clojure|couch] [access|auth] [server|service]
 --------------------------------------------
 
 * html pages in couch `_attachments`
@@ -6,4 +6,9 @@ clojure couch [access|auth] [server|service]
 * authentication
 * authorization
 
+## generate documentation
+
+```shell
+clojure -M:docs
+```
 

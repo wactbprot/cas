@@ -6,5 +6,7 @@
         buddy/buddy-hashers {:mvn/version "1.8.158"}
         integrant/integrant {:mvn/version "0.8.0"}
         ring/ring-jetty-adapter {:mvn/version "1.9.6"}
-        ring/ring-core {:mvn/version "1.9.6"}}}
- 
+        ring/ring-core {:mvn/version "1.9.6"}}
+ :aliases {:docs {:extra-deps {wactbprot/marginalia {:local/root "../marginalia"}}
+                  :main-opts ["-m" "marginalia.core" "-A" "dev"]
+                  :exec-fn marginalia.core/-main}}}
