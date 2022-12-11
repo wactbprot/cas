@@ -22,14 +22,16 @@
 (defonce system (atom {}))
 
 ;; System `config`uration map.
-(def config {:db/couch {:opts {:basic-auth [(System/getenv "CAL_USR") (System/getenv "CAL_PWD")]
+(def config {:db/couch {:opts {:basic-auth [(System/getenv "CAL_USR")
+                                            (System/getenv "CAL_PWD")]
                                ;; :body "{\"json\": \"input\"}"
-                               :headers {"X-Api-Version" "2"}
+                               ;; :headers {"Accept" "application/json"
+                               ;;          "Content-Type" "application/json"}
+                               ;; :query-params {}
                                :content-type :json
                                :socket-timeout 1000
                                :connection-timeout 1000
                                :accept :json
-                               :query-params {}
                                :pool {:threads 1 :default-per-route 1}}
                         :prot "http"
                         :host "localhost"
@@ -66,7 +68,25 @@
 
 (defn uuid [] (java.util.UUID/randomUUID))
 
-;; ## rerister
+;; ## register
+(def userstore (atom {}))
+
+(defn get-allowed-users [{:keys [srv opts] :as db} path]
+  (-> (http/get (str srv path) opts)
+      :body
+      (json/read-str :key-fn keyword)
+      :Maintainers))
+
+
+(comment
+  (defn create-user! [user]
+    (let [password (:password user)
+          user-id (uuid)]
+      (-> user
+          (assoc :id user-id :password-hash (hashers/encrypt password))
+          (dissoc :password)
+          (->> (swap! userstore assoc user-id))))))
+
 
 ;; The register process generates a user in the CouchDB `_users` database.
                                         
@@ -77,28 +97,22 @@
 ;;      -d '{"name": "jan", "password": "apple", "roles": [], "type": "user"}'
 ;; ```
 
-(defn get-allowed-users [{:keys [srv opts] :as db} path]
-  (-> (http/get (str srv path) opts)
-      :body
-      (json/read-str :key-fn keyword)
-      :Maintainers))
 
-(defn create-user! [user]
-  (let [password (:password user)
-        user-id (uuid)]
-    (-> user
-        (assoc :id user-id :password-hash (hashers/encrypt password))
-        (dissoc :password)
-        (->> (swap! userstore assoc user-id)))))
-
+(defn create-user [{srv :srv opts :opts :as db} email pwd]
+  (let [url (str srv "_users/org.couchdb.user:" email)
+        opts (assoc opts :body (json/write-str {:name email :password pwd :roles [] :type "user"}))]
+    (def o opts)
+    (def u url)
+    (prn (http/put url opts))))
+    
 (defn get-user [user-id]
   (get @userstore user-id))
 
-(defn get-user-by-username-and-password [username password]
-  (reduce (fn [_ user]
-            (if (and (= (:username user) username)
-                     (hashers/check password (:password-hash user)))
-              (reduced user))) (vals @userstore)))
+  (defn get-user-by-username-and-password [username password]
+    (reduce (fn [_ user]
+              (if (and (= (:username user) username)
+                       (hashers/check password (:password-hash user)))
+                (reduced user))) (vals @userstore)))
 
 ;; ## login
 
@@ -142,13 +156,15 @@
     (let [{srv :srv opts :opts} db]
       (-> (http/get (str srv path) opts) :body))))
 
+;; The register methode provides the opportunity to allow certain
+;; users (see [[user-allowed?]] and [[get-allowed-users]])
 (defmethod ig/init-key :post/register [_ {:keys [db allowed-users pwd-opts]}]
   (fn [{{email "email" pwd1 "password1" pwd2 "password2"} :form-params session :session :as req}]
-    (let [allowed-users (get-allowed-users db allowed-users)]
-      (if (and (user-allowd? allowed-users :email email)
-               (pwds-ok? pwd1 pwd2 pwd-opts))
-        "yey"
-        "ney"))))
+    (if (and
+         #_(user-allowed? (get-allowed-users db allowed-users) :email email)
+         (passwds-ok? pwd1 pwd2 pwd-opts))
+      (create-user db email pwd1)
+      "ney")))
 
 (defmethod ig/init-key :get/index [_ {:keys [path db]}]
   (fn [req]
