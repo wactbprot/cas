@@ -63,20 +63,36 @@
                             
                             :app (ig/ref :server/app)}})
 
-;; Application base is/was:
-;; https://github.com/adambard/buddy-test/blob/master/src/buddy_test/app.clj
 
+;; ## utils and helper functions
+
+;; some utils   
 (defn uuid [] (java.util.UUID/randomUUID))
+
+(defn sys-map [] (-> system deref))
+
+(defn app [] (-> (sys-map) :server/app))
+
+(defn db [] (->  (sys-map) :db/couch))
+
+(comment
+  (app)
+  (db))
+
+;; The application base is/was:
+;; [github.com/adambard/buddy-test](https://github.com/adambard/buddy-test/blob/master/src/buddy_test/app.clj)
 
 ;; ## register
 (def userstore (atom {}))
 
-(defn get-allowed-users [{:keys [srv opts] :as db} path]
+(defn get-allowed-users-doc [{:keys [srv opts] :as db} path]
   (-> (http/get (str srv path) opts)
       :body
-      (json/read-str :key-fn keyword)
-      :Maintainers))
+      (json/read-str :key-fn keyword)))
 
+(defn get-allowed-users [db path]
+  (-> (get-allowed-users-doc db path)
+      :Maintainers))
 
 (comment
   (defn create-user! [user]
@@ -87,23 +103,64 @@
           (dissoc :password)
           (->> (swap! userstore assoc user-id))))))
 
-
 ;; The register process generates a user in the CouchDB `_users` database.
                                         
-;; ```shell
-;; curl -X PUT http://localhost:5984/_users/org.couchdb.user:jan \
-;;      -H "Accept: application/json" \
-;;      -H "Content-Type: application/json" \
-;;      -d '{"name": "jan", "password": "apple", "roles": [], "type": "user"}'
-;; ```
+;; <pre>
+;; curl -X PUT http://localhost:5984/_users/org.couchdb.user:jan 
+;;       -H "Accept: application/json" 
+;;       -H "Content-Type: application/json" 
+;;       -d '{"name": "jan", "password": "apple", "roles": [], "type": "user"}'
+;; </pre>
 
+;; The response looks like this:
+;; <pre>
+;; {:cached nil,
+;;  :request-time 381,
+;;  :repeatable? false,
+;;  :protocol-version {:name "HTTP", :major 1, :minor 1},
+;;  :streaming? true,
+;;  :chunked? false,
+;;  :reason-phrase "Created",
+;;  :headers
+;;  {"X-CouchDB-Body-Time" "0",
+;;   "X-Couch-Request-ID" "27182a3f7c",
+;;   "Location" "http://localhost:5984/_users/org.couchdb.user:wwwww",
+;;   "Date" "Sun, 11 Dec 2022 10:53:37 GMT",
+;;   "ETag" "\"1-07fd1aae324a51caaa14f91beec78c50\"",
+;;   "Cache-Control" "must-revalidate",
+;;   "Content-Length" "85",
+;;   "Server" "CouchDB/3.2.2 (Erlang OTP/23)",
+;;   "Content-Type" "application/json",
+;;   "Connection" "close"},
+;;  :orig-content-encoding nil,
+;;  :status 201,
+;;  :length 85,
+;;  :body
+;;  "{\"ok\":true,\"id\":\"org.couchdb.user:wwwww\",\"rev\":\"1-07fd1aae324a51caaa14f91beec78c50\"}\n",
+;;  :trace-redirects []}
+;; </pre>
+
+;; <pre>
+;; {
+;;   _id: org.couchdb.user:wactbprot@gmail.com,
+;;   _rev: 1-991b0fa43605bdd2d7e9679400d0d366,
+;;   name: wactbprot@gmail.com,
+;;   roles: [],
+;;   type: user,
+;;   password_scheme: pbkdf2,
+;;   iterations: 10,
+;;   derived_key: 79908b31d412a87240bd7e733225f6d93c5125d8,
+;;   salt: 297ab114fcd91ac3ffd3d88a79189bae
+;;  }
+;; </pre>
 
 (defn create-user [{srv :srv opts :opts :as db} email pwd]
   (let [url (str srv "_users/org.couchdb.user:" email)
-        opts (assoc opts :body (json/write-str {:name email :password pwd :roles [] :type "user"}))]
-    (def o opts)
-    (def u url)
-    (prn (http/put url opts))))
+        body {:name email :password pwd :roles [] :type "user"}
+        opts (assoc opts :body (json/write-str body))
+         res (http/put url opts)]
+    (prn res)
+    ))
     
 (defn get-user [user-id]
   (get @userstore user-id))
@@ -114,12 +171,33 @@
                        (hashers/check password (:password-hash user)))
                 (reduced user))) (vals @userstore)))
 
+;; The register methode provides the opportunity to allow certain
+;; users (see [[user-allowed?]] and [[get-allowed-users]])
+
+(defn user-allowed? [vec-of-maps key value]
+  (->> vec-of-maps
+       (filterv (fn [m] (= value (key m))))
+       count
+       pos?))
+
+;; The password checks can be done on the client side but must be done
+;; on the server side anyway (never trust user input). The `pwd-opts`
+;; can/should be worked out (e.g. regular expression) 
+(defn passwds-ok? [pwd1 pwd2 {:keys [min-length] :as pwd-opts}]
+  (and (= pwd1 pwd2)
+       (<= min-length (count pwd1))))
+
+(defn preconditions-ok? [{{email "email" pwd1 "password1" pwd2 "password2"} :form-params} pwd-opts] 
+  (and
+   #_(user-allowed? (get-allowed-users db allowed-users) :email email)
+   (passwds-ok? pwd1 pwd2 pwd-opts)))
+
 ;; ## login
 
-;; Redirect to `/index/` (success) or `/login/` (fail) after login data are posted.
-(defn post-login [{{username "username" password "password"} :form-params session :session :as req}]
-  (if-let [user (get-user-by-username-and-password username password)]
-    (assoc (redirect "/index/")
+;; Redirect to `/` (success) or `/login/` (fail) after login data are posted.
+(defn post-login [{{email "email" password "password"} :form-params session :session :as req}]
+  (if-let [user (get-user-by-username-and-password email password)]
+    (assoc (redirect "/")
            :session (assoc session :identity (:id user)))
     (redirect "/login/")))
 
@@ -130,16 +208,6 @@
 (defn wrap-user [handler]
   (fn [{user-id :identity :as req}]
     (handler (assoc req :user (get-user user-id)))))
-
-(defn user-allowed? [vec-of-maps key value]
-  (->> vec-of-maps
-       (filterv (fn [m] (= value (key m))))
-       count
-       pos?))
-
-(defn passwds-ok? [pwd1 pwd2 {:keys [min-length] :as pwd-opts}]
-  (and (= pwd1 pwd2)
-       (<= min-length (count pwd1))))
 
 ;; ## system up
 
@@ -156,15 +224,11 @@
     (let [{srv :srv opts :opts} db]
       (-> (http/get (str srv path) opts) :body))))
 
-;; The register methode provides the opportunity to allow certain
-;; users (see [[user-allowed?]] and [[get-allowed-users]])
 (defmethod ig/init-key :post/register [_ {:keys [db allowed-users pwd-opts]}]
-  (fn [{{email "email" pwd1 "password1" pwd2 "password2"} :form-params session :session :as req}]
-    (if (and
-         #_(user-allowed? (get-allowed-users db allowed-users) :email email)
-         (passwds-ok? pwd1 pwd2 pwd-opts))
-      (create-user db email pwd1)
-      "ney")))
+  (fn [{{email "email" pwd "password1"} :form-params  :as req}]
+    (if (preconditions-ok? req pwd-opts)
+      (create-user db email pwd)
+      (redirect "/login/"))))
 
 (defmethod ig/init-key :get/index [_ {:keys [path db]}]
   (fn [req]
@@ -174,7 +238,7 @@
 
 (defmethod ig/init-key :routes/app [_ {:keys [get-login get-index get-register post-register] :as conf}]
   (defroutes all-routes
-    (GET "/index/" [] get-index)
+    (GET "/" [] get-index)
     (GET "/login/" [] get-login)
     (GET "/register/" [] get-register)
     (POST "/register/" [] post-register)
@@ -205,10 +269,6 @@
 (defn stop []
   (ig/halt! @system)
   (reset! system {}))
-
-;; ## helper functions
-
-(defn app [] (-> system deref :server/app))
 
 ;; ## playground
 (comment
