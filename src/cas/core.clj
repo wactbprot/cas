@@ -7,13 +7,15 @@
             [clj-http.client :as http]
             [clojure.java.io :as io]
             [clojure.data.json :as json]
+            [clojure.string :as string]
             [compojure.core :refer [defroutes context GET POST]]
             [compojure.route :refer [not-found]]
             [integrant.core :as ig]
             [ring.adapter.jetty :refer [run-jetty]]
             [ring.middleware.session :refer [wrap-session]]
             [ring.middleware.params :refer [wrap-params]]
-            [ring.util.response :refer [response redirect]]))
+            [ring.util.response :refer [response redirect]]
+            [ring.util.codec :refer [url-encode]]))
 
 ;; # System
 
@@ -35,20 +37,23 @@
                                :pool {:threads 1 :default-per-route 1}}
                         :prot "http"
                         :host "localhost"
-                        :port 5984}
+                        :port 5984
+                        :usr-path "_users/org.couchdb.user:"
+                        :usr-map {:roles [] :type "user"}
+                        :member-path "vl_db/_security"}
 
              :get/register {:db (ig/ref :db/couch)
-                            :path "vl_db/_design/ccas/register.html"}
+                            :path "vl_db/_design/cas/register.html"}
 
              :post/register {:db (ig/ref :db/couch)
                              :pwd-opts {:min-length 3}
                              :allowed-users "vl_db/000_MAINTAINERS"}
              
              :get/login {:db (ig/ref :db/couch)
-                         :path "vl_db/_design/ccas/login.html"}
+                         :path "vl_db/_design/cas/login.html"}
              
              :get/index {:db (ig/ref :db/couch)
-                         :path "vl_db/_design/ccas/login.html"}
+                         :path "vl_db/_design/cas/login.html"}
              
              :routes/app {:get-register (ig/ref :get/register)
                           :post-register (ig/ref :post/register)
@@ -90,6 +95,11 @@
       :body
       (json/read-str :key-fn keyword)))
 
+(defn get-members-doc [{:keys [member-url opts] :as db}]
+  (-> (http/get member-url opts)
+      :body  
+      (json/read-str :key-fn keyword)))
+      
 (defn get-allowed-users [db path]
   (-> (get-allowed-users-doc db path)
       :Maintainers))
@@ -154,14 +164,18 @@
 ;;  }
 ;; </pre>
 
-(defn create-user [{srv :srv opts :opts :as db} email pwd]
-  (let [url (str srv "_users/org.couchdb.user:" email)
-        body {:name email :password pwd :roles [] :type "user"}
-        opts (assoc opts :body (json/write-str body))
-         res (http/put url opts)]
-    (prn res)
-    ))
-    
+(defn create-user [{:keys [usr-url-fn usr-map opts] :as db} usr pwd]
+  (let [url (usr-url-fn usr)
+        body (assoc usr-map :name usr :password pwd)
+        opts (assoc opts :body (json/write-str body))]
+    (http/put url opts)))
+
+(defn make-usr-member [{:keys [member-url opts] :as db} usr]
+  (let [members (get-members-doc db)
+        members (update-in members [:members :names] conj usr)
+        opts (assoc opts :body (json/write-str members))]
+    (http/put member-url opts)))
+
 (defn get-user [user-id]
   (get @userstore user-id))
 
@@ -187,10 +201,25 @@
   (and (= pwd1 pwd2)
        (<= min-length (count pwd1))))
 
-(defn preconditions-ok? [{{email "email" pwd1 "password1" pwd2 "password2"} :form-params} pwd-opts] 
-  (and
-   #_(user-allowed? (get-allowed-users db allowed-users) :email email)
-   (passwds-ok? pwd1 pwd2 pwd-opts)))
+(defn usr-exist? [{:keys [usr-url-fn opts] :as db} usr]
+  (try
+    (http/head (usr-url-fn usr) opts)
+    true
+    (catch Exception e
+      false)))
+
+(comment
+  (usr-exist? (:db/couch @system) "www"); => false
+  (usr-exist? (:db/couch @system) "thomas.bock@ptb.de")) ; => true
+
+(defn check-preconditions [{{email "email" pwd1 "password1" pwd2 "password2"} :form-params} db pwd-opts] 
+  (cond-> {}
+    #_#_(not (user-allowed? (get-allowed-users db allowed-users) :email email)) (assoc :error true
+                                                                                       :reason "user not allowed")
+    (usr-exist? db email) (assoc :error true
+                                 :reason "already registered, goto <a href='/login/'>login</a>")
+    (not (passwds-ok? pwd1 pwd2 pwd-opts)) (assoc :error true
+                                            :reason "passwords dont match, try again <a href='/register/'>register</a>"))) 
 
 ;; ## login
 
@@ -211,8 +240,12 @@
 
 ;; ## system up
 
-(defmethod ig/init-key :db/couch [_ {:keys [prot host port] :as conf}]
-  (assoc conf :srv (str prot "://" host ":" port "/")))
+(defmethod ig/init-key :db/couch [_ {:keys [prot host port usr-path member-path] :as conf}]
+  (let [srv (str prot "://" host ":" port "/")]
+    (assoc conf
+           :srv srv
+           :usr-url-fn (fn [usr] (str srv usr-path usr))
+           :member-url (str srv member-path))))
 
 (defmethod ig/init-key :get/login [_ {:keys [path db]}]
   (fn [req]
@@ -226,14 +259,18 @@
 
 (defmethod ig/init-key :post/register [_ {:keys [db allowed-users pwd-opts]}]
   (fn [{{email "email" pwd "password1"} :form-params  :as req}]
-    (if (preconditions-ok? req pwd-opts)
-      (create-user db email pwd)
-      (redirect "/login/"))))
+    (let [{error :error :as res} (check-preconditions req db pwd-opts)]
+      (if error
+        (-> res :reason)
+        (let [{status :status} (create-user db email pwd)]
+          (if (< status 400)
+            (redirect "/login/")
+            (str "status " status)))))))
 
 (defmethod ig/init-key :get/index [_ {:keys [path db]}]
   (fn [req]
     (if-not (authenticated? req)
-      (throw-unauthorized)
+      (redirect "/login/")
       (str "<h1>hello app</h1>" path))))
 
 (defmethod ig/init-key :routes/app [_ {:keys [get-login get-index get-register post-register] :as conf}]
