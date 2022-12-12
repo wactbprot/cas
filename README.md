@@ -1,3 +1,5 @@
+<img src="logo.png" alt="cas" id="logo" width="300px">
+
 [clojure|couch] [access|auth] [server|service]
 --------------------------------------------
 
