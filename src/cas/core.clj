@@ -26,10 +26,6 @@
 ;; System `config`uration map.
 (def config {:db/couch {:opts {:basic-auth [(System/getenv "CAL_USR")
                                             (System/getenv "CAL_PWD")]
-                               ;; :body "{\"json\": \"input\"}"
-                               ;; :headers {"Accept" "application/json"
-                               ;;          "Content-Type" "application/json"}
-                               ;; :query-params {}
                                :content-type :json
                                :socket-timeout 1000
                                :connection-timeout 1000
@@ -40,7 +36,8 @@
                         :port 5984
                         :usr-path "_users/org.couchdb.user:"
                         :usr-map {:roles [] :type "user"}
-                        :member-path "vl_db/_security"}
+                        :member-path "vl_db/_security"
+                        :session-path "/_session" }
 
              :get/register {:db (ig/ref :db/couch)
                             :path "vl_db/_design/cas/register.html"}
@@ -51,13 +48,16 @@
              
              :get/login {:db (ig/ref :db/couch)
                          :path "vl_db/_design/cas/login.html"}
-             
+
+             :post/login {:db (ig/ref :db/couch)}
+
              :get/index {:db (ig/ref :db/couch)
-                         :path "vl_db/_design/cas/login.html"}
+                         :path "vl_db/_design/cas/index.html"}
              
              :routes/app {:get-register (ig/ref :get/register)
                           :post-register (ig/ref :post/register)
                           :get-login (ig/ref :get/login)
+                          :post-login (ig/ref :post/login)
                           :get-index (ig/ref :get/index)}
 
              :server/app {:routes (ig/ref :routes/app)
@@ -80,10 +80,6 @@
 
 (defn db [] (->  (sys-map) :db/couch))
 
-(comment
-  (app)
-  (db))
-
 ;; The application base is/was:
 ;; [github.com/adambard/buddy-test](https://github.com/adambard/buddy-test/blob/master/src/buddy_test/app.clj)
 
@@ -99,22 +95,13 @@
   (-> (http/get member-url opts)
       :body  
       (json/read-str :key-fn keyword)))
-      
+
 (defn get-allowed-users [db path]
   (-> (get-allowed-users-doc db path)
       :Maintainers))
 
-(comment
-  (defn create-user! [user]
-    (let [password (:password user)
-          user-id (uuid)]
-      (-> user
-          (assoc :id user-id :password-hash (hashers/encrypt password))
-          (dissoc :password)
-          (->> (swap! userstore assoc user-id))))))
-
 ;; The register process generates a user in the CouchDB `_users` database.
-                                        
+
 ;; <pre>
 ;; curl -X PUT http://localhost:5984/_users/org.couchdb.user:jan 
 ;;       -H "Accept: application/json" 
@@ -179,11 +166,11 @@
 (defn get-user [user-id]
   (get @userstore user-id))
 
-  (defn get-user-by-username-and-password [username password]
-    (reduce (fn [_ user]
-              (if (and (= (:username user) username)
-                       (hashers/check password (:password-hash user)))
-                (reduced user))) (vals @userstore)))
+(defn get-user-by-username-and-password [username password]
+  (reduce (fn [_ user]
+            (if (and (= (:username user) username)
+                     (hashers/check password (:password-hash user)))
+              (reduced user))) (vals @userstore)))
 
 ;; The register methode provides the opportunity to allow certain
 ;; users (see [[user-allowed?]] and [[get-allowed-users]])
@@ -219,24 +206,44 @@
     (usr-exist? db email) (assoc :error true
                                  :reason "already registered, goto <a href='/login/'>login</a>")
     (not (passwds-ok? pwd1 pwd2 pwd-opts)) (assoc :error true
-                                            :reason "passwords dont match, try again <a href='/register/'>register</a>"))) 
+                                                  :reason "passwords dont match, try again <a href='/register/'>register</a>"))) 
 
 ;; ## login
 
+;; CouchDB provides [Cookie Authentication](https://docs.couchdb.org/en/3.2.2-docs/api/server/authn.html#cookie-authentication)
+;; The request:
+;;
+;; <pre>
+;; POST /_session HTTP/1.1
+;; Accept: application/json
+;; Content-Length: 37
+;; Content-Type: application/json
+;; Host: localhost:5984
+;; 
+;; {
+;;     "name": "root",
+;;     "password": "relax"
+;;  }
+;; </pre>
+;; will be anwered with
+;;
+;; <pre>
+;; HTTP/1.1 200 OK
+;; Cache-Control: must-revalidate
+;; Content-Length: 43
+;; Content-Type: application/json
+;; Date: Mon, 03 Dec 2012 01:23:14 GMT
+;; Server: CouchDB (Erlang/OTP)
+;; Set-Cookie: AuthSession=cm9vdDo1MEJCRkYwMjq0LO0ylOIwShrgt8y-UkhI-c6BGw; Version=1; Path=/; HttpOnly
+;; 
+;; {"ok":true,"name":"root","roles":["_admin"]}
+;; </pre>
 ;; Redirect to `/` (success) or `/login/` (fail) after login data are posted.
-(defn post-login [{{email "email" password "password"} :form-params session :session :as req}]
-  (if-let [user (get-user-by-username-and-password email password)]
-    (assoc (redirect "/")
-           :session (assoc session :identity (:id user)))
-    (redirect "/login/")))
 
-(defn post-logout [{session :session}]
-  (assoc (redirect "/login/")
-         :session (dissoc session :identity)))
+(defn get-cookie [{:keys [srv session-path opts] :as db} usr pwd]
+  (let [opts (assoc opts :body (json/write-str {:name usr :password pwd}))]
+    (-> (http/post (str srv session-path) opts) :Set-Cookie)))
 
-(defn wrap-user [handler]
-  (fn [{user-id :identity :as req}]
-    (handler (assoc req :user (get-user user-id)))))
 
 ;; ## system up
 
@@ -251,6 +258,12 @@
   (fn [req]
     (let [{srv :srv opts :opts} db]
       (-> (http/get (str srv path) opts) :body))))
+
+(defmethod ig/init-key :post/login [_ {:keys [db]}]
+  (fn [{{email "email" pwd "password"} :form-params  :as req}]
+    (if-let [cookie (get-cookie db email pwd)]
+      (assoc (redirect "/") :Set-Cookie cookie)
+      (redirect "/login/"))))
 
 (defmethod ig/init-key :get/register [_ {:keys [path db]}]
   (fn [req]
@@ -273,19 +286,17 @@
       (redirect "/login/")
       (str "<h1>hello app</h1>" path))))
 
-(defmethod ig/init-key :routes/app [_ {:keys [get-login get-index get-register post-register] :as conf}]
+(defmethod ig/init-key :routes/app [_ {:keys [get-login post-login get-index get-register post-register] :as conf}]
   (defroutes all-routes
     (GET "/" [] get-index)
     (GET "/login/" [] get-login)
     (GET "/register/" [] get-register)
     (POST "/register/" [] post-register)
     (POST "/login/" [] post-login)
-    (POST "/logout/" [] post-logout)
     (not-found "<h1>not found</h1>")))
 
 (defmethod ig/init-key :server/app [_ {:keys [backend routes]}]
   (-> routes
-      (wrap-user)
       (wrap-authentication backend)
       (wrap-authorization backend)
       (wrap-session)
@@ -308,6 +319,11 @@
   (reset! system {}))
 
 ;; ## playground
+
+(comment
+  (app)
+  (db))
+
 (comment
   ((app) {:request-method :post :uri "/login/" :body "username=admin&password=1234"})
   ((app) {:request-method :get :uri "/admin/"
@@ -323,3 +339,13 @@
 
 (comment
   (passwds-ok? "123" "123" {:min-length 3}))
+
+
+(comment
+  (defn create-user! [user]
+    (let [password (:password user)
+          user-id (uuid)]
+      (-> user
+          (assoc :id user-id :password-hash (hashers/encrypt password))
+          (dissoc :password)
+          (->> (swap! userstore assoc user-id))))))
