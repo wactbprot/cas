@@ -1,5 +1,4 @@
 {:deps {org.clojure/clojure {:mvn/version "1.11.1"}
-        buddy/buddy-auth {:mvn/version "3.0.323"}
         clj-http/clj-http {:mvn/version "3.12.3"}
         compojure/compojure {:mvn/version "1.6.1"}
         org.clojure/data.json {:mvn/version "2.4.0"}

@@ -1,11 +1,6 @@
 (ns cas.core
   ^{:author "Thomas Bock <thomas.bock@ptb.de>"}
   (:require
-   [buddy.auth.accessrules :refer [restrict]]
-   [buddy.auth.backends.session :refer [session-backend]]
-   [buddy.auth.middleware :refer [wrap-authentication wrap-authorization]]
-   [buddy.hashers :as hashers]
-   [buddy.auth :refer [authenticated? throw-unauthorized]]
    [clj-http.client :as http]
    [clojure.java.io :as io]
    [clojure.data.json :as json]
@@ -230,12 +225,10 @@
 ;; </pre>
 ;; Redirect to `/` (success) or `/login/` (fail) after login data are posted.
 
-(defn res->cookie [res] (-> res :cookies (get "AuthSession")  :value))
-
 (defn get-cookie [{:keys [srv session-path opts] :as db} usr pwd]
   (let [opts (assoc opts :body (json/write-str {:name usr :password pwd}))]
     (-> (http/post (str srv session-path) opts)
-        res->cookie)))
+        :cookies (get "AuthSession")  :value)))
 
 ;; ## system up
 
@@ -281,7 +274,7 @@
   (fn [req]
     (let [{srv :srv opts :opts} db
           opts (dissoc opts :basic-auth)
-          opts (assoc-in  opts [:headers :Cookie] (str "AuthSession=" (res->cookie req)))]
+          opts (assoc-in  opts [:headers :Cookie] (get-in req [:headers "cookie"]))]
       (-> (http/get (str srv path) opts :body)))))
 
 (defmethod ig/init-key :routes/app [_ {:keys [get-login post-login get-index get-register post-register] :as conf}]
@@ -295,9 +288,6 @@
 
 (defmethod ig/init-key :server/app [_ {:keys [backend routes]}]
   (-> routes
-      (wrap-authentication backend)
-      (wrap-authorization backend)
-      (wrap-session)
       (wrap-params)))
 
 ;; ## system down
