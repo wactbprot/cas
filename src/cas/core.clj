@@ -259,13 +259,17 @@
 
 (defmethod ig/init-key :post/register [_ {:keys [db allowed-users pwd-opts]}]
   (fn [{{email "email" pwd "password1"} :form-params  :as req}]
-    (let [{error :error :as res} (check-preconditions req db pwd-opts)]
-      (if error
-        (-> res :reason)
+    (let [{error :error
+           reason :reason} (check-preconditions req db pwd-opts)]
+      (if-not error
         (let [{status :status} (create-user db email pwd)]
           (if (< status 400)
-            (redirect "/login/")
-            (str "status " status)))))))
+            (let [{status :status} (make-usr-member db email)]
+              (if (< status 400)
+                (redirect "/login/")
+                (str "status " status)))
+            (str "status " status)))
+        (str "precondition failed " reason) ))))
 
 (defmethod ig/init-key :get/index [_ {:keys [path db]}]
   (fn [req]
