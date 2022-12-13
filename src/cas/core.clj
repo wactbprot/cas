@@ -163,14 +163,6 @@
         opts (assoc opts :body (json/write-str members))]
     (http/put member-url opts)))
 
-(defn get-user [user-id]
-  (get @userstore user-id))
-
-(defn get-user-by-username-and-password [username password]
-  (reduce (fn [_ user]
-            (if (and (= (:username user) username)
-                     (hashers/check password (:password-hash user)))
-              (reduced user))) (vals @userstore)))
 
 ;; The register methode provides the opportunity to allow certain
 ;; users (see [[user-allowed?]] and [[get-allowed-users]])
@@ -194,10 +186,6 @@
     true
     (catch Exception e
       false)))
-
-(comment
-  (usr-exist? (:db/couch @system) "www"); => false
-  (usr-exist? (:db/couch @system) "thomas.bock@ptb.de")) ; => true
 
 (defn check-preconditions [{{email "email" pwd1 "password1" pwd2 "password2"} :form-params} db pwd-opts] 
   (cond-> {}
@@ -323,6 +311,10 @@
 (comment
   (app)
   (db))
+
+(comment
+  (usr-exist? (db) "www"); => false
+  (usr-exist? (db) "thomas.bock@ptb.de")) ; => true
 
 (comment
   ((app) {:request-method :post :uri "/login/" :body "username=admin&password=1234"})
