@@ -1,21 +1,23 @@
 (ns cas.core
-  (:require [buddy.auth.accessrules :refer [restrict]]
-            [buddy.auth.backends.session :refer [session-backend]]
-            [buddy.auth.middleware :refer [wrap-authentication wrap-authorization]]
-            [buddy.hashers :as hashers]
-            [buddy.auth :refer [authenticated? throw-unauthorized]]
-            [clj-http.client :as http]
-            [clojure.java.io :as io]
-            [clojure.data.json :as json]
-            [clojure.string :as string]
-            [compojure.core :refer [defroutes context GET POST]]
-            [compojure.route :refer [not-found]]
-            [integrant.core :as ig]
-            [ring.adapter.jetty :refer [run-jetty]]
-            [ring.middleware.session :refer [wrap-session]]
-            [ring.middleware.params :refer [wrap-params]]
-            [ring.util.response :refer [response redirect]]
-            [ring.util.codec :refer [url-encode]]))
+  ^{:author "Thomas Bock <thomas.bock@ptb.de>"}
+  (:require
+   [buddy.auth.accessrules :refer [restrict]]
+   [buddy.auth.backends.session :refer [session-backend]]
+   [buddy.auth.middleware :refer [wrap-authentication wrap-authorization]]
+   [buddy.hashers :as hashers]
+   [buddy.auth :refer [authenticated? throw-unauthorized]]
+   [clj-http.client :as http]
+   [clojure.java.io :as io]
+   [clojure.data.json :as json]
+   [clojure.string :as string]
+   [compojure.core :refer [defroutes context GET POST]]
+   [compojure.route :refer [not-found]]
+   [integrant.core :as ig]
+   [ring.adapter.jetty :refer [run-jetty]]
+   [ring.middleware.session :refer [wrap-session]]
+   [ring.middleware.params :refer [wrap-params]]
+   [ring.util.response :refer [response redirect]]
+   [ring.util.codec :refer [url-encode]]))
 
 ;; # System
 
@@ -228,10 +230,12 @@
 ;; </pre>
 ;; Redirect to `/` (success) or `/login/` (fail) after login data are posted.
 
+(defn res->cookie [res] (-> res :cookies (get "AuthSession")  :value))
+
 (defn get-cookie [{:keys [srv session-path opts] :as db} usr pwd]
   (let [opts (assoc opts :body (json/write-str {:name usr :password pwd}))]
-    (-> (http/post (str srv session-path) opts) :Set-Cookie)))
-
+    (-> (http/post (str srv session-path) opts)
+        res->cookie)))
 
 ;; ## system up
 
@@ -249,6 +253,7 @@
 
 (defmethod ig/init-key :post/login [_ {:keys [db]}]
   (fn [{{email "email" pwd "password"} :form-params  :as req}]
+    (prn (get-cookie db email pwd))
     (if-let [cookie (get-cookie db email pwd)]
       (assoc (redirect "/") :Set-Cookie cookie)
       (redirect "/login/"))))
@@ -274,9 +279,10 @@
 
 (defmethod ig/init-key :get/index [_ {:keys [path db]}]
   (fn [req]
-    (if-not (authenticated? req)
-      (redirect "/login/")
-      (str "<h1>hello app</h1>" path))))
+    (let [{srv :srv opts :opts} db
+          opts (dissoc opts :basic-auth)
+          opts (assoc-in  opts [:headers :Cookie] (str "AuthSession=" (res->cookie req)))]
+      (-> (http/get (str srv path) opts :body)))))
 
 (defmethod ig/init-key :routes/app [_ {:keys [get-login post-login get-index get-register post-register] :as conf}]
   (defroutes all-routes
