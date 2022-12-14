@@ -2,10 +2,13 @@
         clj-http/clj-http {:mvn/version "3.12.3"}
         compojure/compojure {:mvn/version "1.6.1"}
         org.clojure/data.json {:mvn/version "2.4.0"}
-        buddy/buddy-hashers {:mvn/version "1.8.158"}
         integrant/integrant {:mvn/version "0.8.0"}
         ring/ring-jetty-adapter {:mvn/version "1.9.6"}
         ring/ring-core {:mvn/version "1.9.6"}}
- :aliases {:docs {:extra-deps {wactbprot/marginalia {:local/root "../marginalia"}}
+ 
+ :aliases {:build {:deps {io.github.clojure/tools.build {:git/tag "v0.7.5" :git/sha "34727f7"}}
+                   :ns-default build}
+
+           :docs {:extra-deps {wactbprot/marginalia {:local/root "../marginalia"}}
                   :main-opts ["-m" "marginalia.core" "-A" "dev"]
                   :exec-fn marginalia.core/-main}}}
