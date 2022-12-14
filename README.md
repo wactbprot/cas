@@ -21,3 +21,16 @@ https://wactbprot.github.io/cas/
 clojure -M:docs
 ```
 
+### Build uberjar 
+
+```shell
+clj -T:build clean
+clj -T:build prep
+clj -T:build uber
+```
+
+short:
+
+```shell
+clj -T:build all
+```

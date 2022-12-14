@@ -78,9 +78,6 @@
 
 (defn db [] (->  (sys-map) :db/couch))
 
-;; The application base is/was:
-;; [github.com/adambard/buddy-test](https://github.com/adambard/buddy-test/blob/master/src/buddy_test/app.clj)
-
 ;; ## register
 (defn status-ok? [{:keys [status body] :as res}] (< status 400))
 
@@ -90,86 +87,23 @@
   (when-let [body (res->body res)] (json/read-str body :key-fn keyword)))
 
 (defn admin-opts [{:keys [admin-usr admin-pwd] :as db}]
-  (-> db
-      :opts
-      (assoc :basic-auth  [admin-usr admin-pwd])))
+  (-> db :opts (assoc :basic-auth  [admin-usr admin-pwd])))
 
 (defn get-allowed-users-doc [{:keys [srv allowed-users-path] :as db}]
   (-> (http/get (str srv allowed-users-path) (admin-opts db))
-      res->json))
-
-(defn get-members-doc [{:keys [member-url] :as db}]
-  (-> (http/get member-url (admin-opts db))
       res->json))
 
 (defn get-allowed-users [db]
   (-> (get-allowed-users-doc db)
       :Maintainers))
 
-;; The register process generates a user in the CouchDB `_users` database.
-
-;; <pre>
-;; curl -X PUT http://localhost:5984/_users/org.couchdb.user:jan 
-;;       -H "Accept: application/json" 
-;;       -H "Content-Type: application/json" 
-;;       -d '{"name": "jan", "password": "apple", "roles": [], "type": "user"}'
-;; </pre>
-
-;; The response looks like this:
-;; <pre>
-;; {:cached nil,
-;;  :request-time 381,
-;;  :repeatable? false,
-;;  :protocol-version {:name "HTTP", :major 1, :minor 1},
-;;  :streaming? true,
-;;  :chunked? false,
-;;  :reason-phrase "Created",
-;;  :headers
-;;  {"X-CouchDB-Body-Time" "0",
-;;   "X-Couch-Request-ID" "27182a3f7c",
-;;   "Location" "http://localhost:5984/_users/org.couchdb.user:wwwww",
-;;   "Date" "Sun, 11 Dec 2022 10:53:37 GMT",
-;;   "ETag" "\"1-07fd1aae324a51caaa14f91beec78c50\"",
-;;   "Cache-Control" "must-revalidate",
-;;   "Content-Length" "85",
-;;   "Server" "CouchDB/3.2.2 (Erlang OTP/23)",
-;;   "Content-Type" "application/json",
-;;   "Connection" "close"},
-;;  :orig-content-encoding nil,
-;;  :status 201,
-;;  :length 85,
-;;  :body
-;;  "{\"ok\":true,\"id\":\"org.couchdb.user:wwwww\",\"rev\":\"1-07fd1aae324a51caaa14f91beec78c50\"}\n",
-;;  :trace-redirects []}
-;; </pre>
-
-;; <pre>
-;; {
-;;   _id: org.couchdb.user:wactbprot@gmail.com,
-;;   _rev: 1-991b0fa43605bdd2d7e9679400d0d366,
-;;   name: wactbprot@gmail.com,
-;;   roles: [],
-;;   type: user,
-;;   password_scheme: pbkdf2,
-;;   iterations: 10,
-;;   derived_key: 79908b31d412a87240bd7e733225f6d93c5125d8,
-;;   salt: 297ab114fcd91ac3ffd3d88a79189bae
-;;  }
-;; </pre>
-
+;; The register process creates a user in the CouchDB `_users` database.
 (defn create-user [{:keys [usr-url-fn usr-map] :as db} usr pwd]
   (let [url (usr-url-fn usr)
         body (assoc usr-map :name usr :password pwd)
         opts (admin-opts db)
         opts (assoc opts :body (json/write-str body))]
     (res->json (http/put url opts))))
-
-(defn make-usr-member [{:keys [member-url opts] :as db} usr]
-  (let [members (get-members-doc db)
-        members (update-in members [:members :names] conj usr)
-        opts (admin-opts db)
-        opts (assoc opts :body (json/write-str members))]
-    (res->json (http/put member-url opts))))
 
 
 ;; The register methode provides the opportunity to allow certain
@@ -201,35 +135,15 @@
 
 ;; ## login
 
-;; CouchDB provides [Cookie Authentication](https://docs.couchdb.org/en/3.2.2-docs/api/server/authn.html#cookie-authentication)
-;; The request:
-;;
-;; <pre>
-;; POST /_session HTTP/1.1
-;; Accept: application/json
-;; Content-Length: 37
-;; Content-Type: application/json
-;; Host: localhost:5984
-;; 
-;; {
-;;     "name": "root",
-;;     "password": "relax"
-;;  }
-;; </pre>
-;; will be anwered with
-;;
-;; <pre>
-;; HTTP/1.1 200 OK
-;; Cache-Control: must-revalidate
-;; Content-Length: 43
-;; Content-Type: application/json
-;; Date: Mon, 03 Dec 2012 01:23:14 GMT
-;; Server: CouchDB (Erlang/OTP)
-;; Set-Cookie: AuthSession=cm9vdDo1MEJCRkYwMjq0LO0ylOIwShrgt8y-UkhI-c6BGw; Version=1; Path=/; HttpOnly
-;; 
-;; {"ok":true,"name":"root","roles":["_admin"]}
-;; </pre>
 ;; Redirect to `/` (success) or `/login/` (fail) after login data are posted.
+
+(defn make-usr-member [{:keys [member-url] :as db} usr]
+  (let [opts (admin-opts db)
+        members (res->json (http/get member-url opts))
+        members (update-in members [:members :names] conj usr)
+        opts (assoc opts :body (json/write-str members))]
+    (res->json (http/put member-url opts))))
+
 (defn res->cookie [res]
   (when (status-ok? res)
     (-> res :cookies (get "AuthSession") :value)))
@@ -270,13 +184,12 @@
 
 (defmethod ig/init-key :post/register [_ {:keys [db allowed-users pwd-opts]}]
   (fn [{{email "email" pwd "password1"} :form-params  :as req}]
-    (let [{error :error
-           reason :reason} (check-preconditions req db pwd-opts)]
+    (let [{error :error reason :reason} (check-preconditions req db pwd-opts)]
       (if-not error
         (if (create-user db email pwd)
-            (redirect "/login/")
-        (str "failed to create user "))
-      (str "precondition failed " reason)))))
+          (redirect "/login/")
+          (str "failed to create user "))
+        (str "precondition failed " reason)))))
 
 (defmethod ig/init-key :get/index [_ {:keys [path db]}]
   (fn [req]
