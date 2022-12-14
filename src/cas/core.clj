@@ -21,27 +21,28 @@
 (defonce system (atom {}))
 
 ;; System `config`uration map.
-(def config {:db/couch {:opts {:basic-auth [(System/getenv "CAL_USR")
-                                            (System/getenv "CAL_PWD")]
-                               :content-type :json
+(def config {:db/couch {:opts {:content-type :json
                                :socket-timeout 1000
                                :connection-timeout 1000
+                               :throw-exceptions false
                                :accept :json
                                :pool {:threads 1 :default-per-route 1}}
                         :prot "http"
                         :host "localhost"
                         :port 5984
+                        :admin-usr (System/getenv "CAL_USR")
+                        :admin-pwd (System/getenv "CAL_PWD")
                         :usr-path "_users/org.couchdb.user:"
                         :usr-map {:roles [] :type "user"}
                         :member-path "vl_db/_security"
+                        :allowed-users-path "vl_db/000_MAINTAINERS"
                         :session-path "/_session" }
 
              :get/register {:db (ig/ref :db/couch)
                             :path "vl_db/_design/cas/register.html"}
 
              :post/register {:db (ig/ref :db/couch)
-                             :pwd-opts {:min-length 3}
-                             :allowed-users "vl_db/000_MAINTAINERS"}
+                             :pwd-opts {:min-length 3}}
              
              :get/login {:db (ig/ref :db/couch)
                          :path "vl_db/_design/cas/login.html"}
@@ -81,20 +82,28 @@
 ;; [github.com/adambard/buddy-test](https://github.com/adambard/buddy-test/blob/master/src/buddy_test/app.clj)
 
 ;; ## register
-(def userstore (atom {}))
+(defn status-ok? [{:keys [status body] :as res}] (< status 400))
 
-(defn get-allowed-users-doc [{:keys [srv opts] :as db} path]
-  (-> (http/get (str srv path) opts)
-      :body
-      (json/read-str :key-fn keyword)))
+(defn res->body [{:keys [status body] :as res}] (when (status-ok? res) body))
 
-(defn get-members-doc [{:keys [member-url opts] :as db}]
-  (-> (http/get member-url opts)
-      :body  
-      (json/read-str :key-fn keyword)))
+(defn res->json [res]
+  (when-let [body (res->body res)] (json/read-str body :key-fn keyword)))
 
-(defn get-allowed-users [db path]
-  (-> (get-allowed-users-doc db path)
+(defn admin-opts [{:keys [admin-usr admin-pwd] :as db}]
+  (-> db
+      :opts
+      (assoc :basic-auth  [admin-usr admin-pwd])))
+
+(defn get-allowed-users-doc [{:keys [srv allowed-users-path] :as db}]
+  (-> (http/get (str srv allowed-users-path) (admin-opts db))
+      res->json))
+
+(defn get-members-doc [{:keys [member-url] :as db}]
+  (-> (http/get member-url (admin-opts db))
+      res->json))
+
+(defn get-allowed-users [db]
+  (-> (get-allowed-users-doc db)
       :Maintainers))
 
 ;; The register process generates a user in the CouchDB `_users` database.
@@ -148,22 +157,23 @@
 ;;  }
 ;; </pre>
 
-(defn create-user [{:keys [usr-url-fn usr-map opts] :as db} usr pwd]
+(defn create-user [{:keys [usr-url-fn usr-map] :as db} usr pwd]
   (let [url (usr-url-fn usr)
         body (assoc usr-map :name usr :password pwd)
+        opts (admin-opts db)
         opts (assoc opts :body (json/write-str body))]
-    (http/put url opts)))
+    (res->json (http/put url opts))))
 
 (defn make-usr-member [{:keys [member-url opts] :as db} usr]
   (let [members (get-members-doc db)
         members (update-in members [:members :names] conj usr)
+        opts (admin-opts db)
         opts (assoc opts :body (json/write-str members))]
-    (http/put member-url opts)))
+    (res->json (http/put member-url opts))))
 
 
 ;; The register methode provides the opportunity to allow certain
 ;; users (see [[user-allowed?]] and [[get-allowed-users]])
-
 (defn user-allowed? [vec-of-maps key value]
   (->> vec-of-maps
        (filterv (fn [m] (= value (key m))))
@@ -177,21 +187,17 @@
   (and (= pwd1 pwd2)
        (<= min-length (count pwd1))))
 
-(defn usr-exist? [{:keys [usr-url-fn opts] :as db} usr]
-  (try
-    (http/head (usr-url-fn usr) opts)
-    true
-    (catch Exception e
-      false)))
+(defn usr-exist? [{:keys [usr-url-fn] :as db} usr]
+  (status-ok? (http/head (usr-url-fn usr) (admin-opts db))))
 
 (defn check-preconditions [{{email "email" pwd1 "password1" pwd2 "password2"} :form-params} db pwd-opts] 
   (cond-> {}
     #_#_(not (user-allowed? (get-allowed-users db allowed-users) :email email)) (assoc :error true
                                                                                        :reason "user not allowed")
     (usr-exist? db email) (assoc :error true
-                                 :reason "already registered, goto <a href='/login/'>login</a>")
+                                 :reason "already registered <a href='/login/'>login</a>")
     (not (passwds-ok? pwd1 pwd2 pwd-opts)) (assoc :error true
-                                                  :reason "passwords dont match, try again <a href='/register/'>register</a>"))) 
+                                                  :reason "passwords mismatch <a href='/register/'>register</a>"))) 
 
 ;; ## login
 
@@ -224,11 +230,14 @@
 ;; {"ok":true,"name":"root","roles":["_admin"]}
 ;; </pre>
 ;; Redirect to `/` (success) or `/login/` (fail) after login data are posted.
+(defn res->cookie [res]
+  (when (status-ok? res)
+    (-> res :cookies (get "AuthSession") :value)))
 
 (defn get-cookie [{:keys [srv session-path opts] :as db} usr pwd]
   (let [opts (assoc opts :body (json/write-str {:name usr :password pwd}))]
     (-> (http/post (str srv session-path) opts)
-        :cookies (get "AuthSession")  :value)))
+        res->cookie)))
 
 ;; ## system up
 
@@ -242,40 +251,41 @@
 (defmethod ig/init-key :get/login [_ {:keys [path db]}]
   (fn [req]
     (let [{srv :srv opts :opts} db]
-      (-> (http/get (str srv path) opts) :body))))
+      (-> (http/get (str srv path) (admin-opts db))
+          res->body))))
 
 (defmethod ig/init-key :post/login [_ {:keys [db]}]
   (fn [{{email "email" pwd "password"} :form-params  :as req}]
-    (prn (get-cookie db email pwd))
     (if-let [cookie (get-cookie db email pwd)]
-      (assoc (redirect "/") :Set-Cookie cookie)
+      (if (make-usr-member db email)
+        (assoc (redirect "/") :Set-Cookie cookie)
+        (str "failed to make user a database member"))
       (redirect "/login/"))))
 
 (defmethod ig/init-key :get/register [_ {:keys [path db]}]
   (fn [req]
-    (let [{srv :srv opts :opts} db]
-      (-> (http/get (str srv path) opts) :body))))
+    (let [{srv :srv} db]
+      (-> (http/get (str srv path) (admin-opts db))
+          res->body))))
 
 (defmethod ig/init-key :post/register [_ {:keys [db allowed-users pwd-opts]}]
   (fn [{{email "email" pwd "password1"} :form-params  :as req}]
     (let [{error :error
            reason :reason} (check-preconditions req db pwd-opts)]
       (if-not error
-        (let [{status :status} (create-user db email pwd)]
-          (if (< status 400)
-            (let [{status :status} (make-usr-member db email)]
-              (if (< status 400)
-                (redirect "/login/")
-                (str "status " status)))
-            (str "status " status)))
-        (str "precondition failed " reason) ))))
+        (if (create-user db email pwd)
+            (redirect "/login/")
+        (str "failed to create user "))
+      (str "precondition failed " reason)))))
 
 (defmethod ig/init-key :get/index [_ {:keys [path db]}]
   (fn [req]
     (let [{srv :srv opts :opts} db
-          opts (dissoc opts :basic-auth)
-          opts (assoc-in  opts [:headers :Cookie] (get-in req [:headers "cookie"]))]
-      (-> (http/get (str srv path) opts :body)))))
+          opts (assoc-in opts [:headers :Cookie] (get-in req [:headers "cookie"]))
+          res (http/get (str srv path) opts)]
+      (if (status-ok? res)
+        (res->body res)
+        (redirect "/login/")))))
 
 (defmethod ig/init-key :routes/app [_ {:keys [get-login post-login get-index get-register post-register] :as conf}]
   (defroutes all-routes
@@ -317,27 +327,7 @@
   (usr-exist? (db) "thomas.bock@ptb.de")) ; => true
 
 (comment
-  ((app) {:request-method :post :uri "/login/" :body "username=admin&password=1234"})
-  ((app) {:request-method :get :uri "/admin/"
-          :headers {"cookie" "ring-session=5c39d06a-156d-401f-ae1c-f86a2ca717d6"}}))
-
-(comment
   (create-user! {:username "admin" :password "1234"}))
 
 (comment
-  (def vec-of-maps
-    (get-allowed-users (:db/couch @system) "vl_db/000_MAINTAINERS"))
-  (user-allowed? vec-of-maps :email "Thomas.Bock@ptb.de"))
-
-(comment
   (passwds-ok? "123" "123" {:min-length 3}))
-
-
-(comment
-  (defn create-user! [user]
-    (let [password (:password user)
-          user-id (uuid)]
-      (-> user
-          (assoc :id user-id :password-hash (hashers/encrypt password))
-          (dissoc :password)
-          (->> (swap! userstore assoc user-id))))))
