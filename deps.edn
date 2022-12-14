@@ -10,5 +10,5 @@
                    :ns-default build}
 
            :docs {:extra-deps {wactbprot/marginalia {:local/root "../marginalia"}}
-                  :main-opts ["-m" "marginalia.core" "-A" "dev"]
+                  :main-opts ["-m" "marginalia.core" "-A" "dev" "-f" "index.html"]
                   :exec-fn marginalia.core/-main}}}
