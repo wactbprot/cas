@@ -1,4 +1,4 @@
 {;; configuration map for marginalia
  :name "cas"
- :version "0.0.1"
+ :version "0.1.1"
  :description "[clojure|couch] [access|auth] [server|service]"}
