@@ -77,6 +77,9 @@
     (-> (http/post (str srv session-path) opts)
         res->cookie)))
 
+(defn pass-cookie [req opts]
+  (assoc-in opts [:headers :Cookie] (get-in req [:headers "cookie"])))
+
 ;; ## handler functions 
 
 ;; The register login process works as follows.
@@ -127,11 +130,11 @@
 
 ;; ### get index
 
-;; The request to index with auth cookie is piped.
+;; The request to index with auth cookie is passed from request to request header (`opts`).
 (defn get-index [{:keys [path db]}]
   (fn [req]
     (let [{srv :srv opts :opts} db
-          opts (assoc-in opts [:headers :Cookie] (get-in req [:headers "cookie"]))
+          opts (pass-cookie req opts)
           res (http/get (str srv path) opts)]
       (if (status-ok? res)
         (res->body res)
