@@ -13,7 +13,7 @@
    [ring.util.codec :refer [url-encode]]))
 
 
-;; ## System `config`uration map
+;; ## System configuration map
 
 (def config {:db/couch {:opts {:content-type :json
                                :socket-timeout 1000
@@ -46,7 +46,9 @@
              :get/index {:db (ig/ref :db/couch)
                          :path "vl_db/_design/cas/index.html"
                          ;; arbitrary data transformation
-                         :data-trans-fn (fn [body] (str "<i>do something</i>" body "<i>with the data</i>"))}
+                         :data-trans-fn (fn [body] (str "<i>do something</i>"
+                                                       body
+                                                       "<i>with the data</i>"))}
              
              :routes/app {:get-register (ig/ref :get/register)
                           :post-register (ig/ref :post/register)
@@ -67,12 +69,10 @@
 ;; by [integrant](https://github.com/weavejester/integrant)
 (defonce system (atom {}))
 
+;; Some helper functions.
 (defn sys-map [] (-> system deref))
-
 (defn app [] (-> (sys-map) :server/app))
-
 (defn db [] (->  (sys-map) :db/couch))
-
 
 ;; ## system up
 
