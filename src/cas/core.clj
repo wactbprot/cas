@@ -44,7 +44,9 @@
              :post/login {:db (ig/ref :db/couch)}
 
              :get/index {:db (ig/ref :db/couch)
-                         :path "vl_db/_design/cas/index.html"}
+                         :path "vl_db/_design/cas/index.html"
+                         ;; arbitrary data transformation
+                         :data-trans-fn (fn [body] (str "<i>do something</i>" body "<i>with the data</i>"))}
              
              :routes/app {:get-register (ig/ref :get/register)
                           :post-register (ig/ref :post/register)

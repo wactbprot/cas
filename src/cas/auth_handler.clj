@@ -130,12 +130,14 @@
 
 ;; ### get index
 
-;; The request to index with auth cookie is passed from request to request header (`opts`).
-(defn get-index [{:keys [path db]}]
+;; The request to index `/` is authorised by the session cookie
+;; passed. The `data-trans-fn` enables the transformation of the data
+;; received from the database.
+(defn get-index [{:keys [path db data-trans-fn]}]
   (fn [req]
     (let [{srv :srv opts :opts} db
           opts (pass-cookie req opts)
           res (http/get (str srv path) opts)]
       (if (status-ok? res)
-        (res->body res)
+        (data-trans-fn (res->body res))
         (redirect "/login/")))))

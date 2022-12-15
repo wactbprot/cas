@@ -2,7 +2,7 @@
   (:require [clojure.tools.build.api :as b]))
 
 (def lib 'com.github.wactbprot/cas)
-(def version (format "0.1.%s" (b/git-count-revs nil)))
+(def version (format "0.2.%s" (b/git-count-revs nil)))
 (def class-dir "target/classes")
 (def basis (b/create-basis {:project "deps.edn" :aliases [:dev]}))
 (def uber-file (format "target/%s-%s.jar" (name lib) version))
