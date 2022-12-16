@@ -1,2 +1,6 @@
 .cpcache/
 .nrepl-port
+couchapp/_attachments/css/uikit.css
+couchapp/_attachments/js/jquery.js
+couchapp/_attachments/js/uikit-icons.js
+couchapp/_attachments/js/uikit.js
