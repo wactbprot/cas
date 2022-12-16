@@ -28,29 +28,43 @@
                         :admin-pwd (System/getenv "CAL_PWD")
                         :usr-path "_users/org.couchdb.user:"
                         :usr-map {:roles [] :type "user"}
+                        :js-path "vl_db/_design/cas/js%2F"
+                        :css-path "vl_db/_design/cas/css%2F"
                         :member-path "vl_db/_security"
                         :allowed-users-path "vl_db/000_MAINTAINERS"
                         :session-path "/_session" }
 
              :get/register {:db (ig/ref :db/couch)
-                            :path "vl_db/_design/cas/register.html"}
+                            :header "vl_db/_design/cas/header.html"
+                            :footer "vl_db/_design/cas/footer.html"
+                            :content "vl_db/_design/cas/register.html"
+                            :data-trans-fn identity}
 
              :post/register {:db (ig/ref :db/couch)
                              :pwd-opts {:min-length 3}}
              
              :get/login {:db (ig/ref :db/couch)
-                         :path "vl_db/_design/cas/login.html"}
+                            :header "vl_db/_design/cas/header.html"
+                            :footer "vl_db/_design/cas/footer.html"
+                            :content "vl_db/_design/cas/login.html"
+                            :data-trans-fn identity}
 
              :post/login {:db (ig/ref :db/couch)}
 
              :get/index {:db (ig/ref :db/couch)
-                         :path "vl_db/_design/cas/index.html"
-                         ;; arbitrary data transformation
-                         :data-trans-fn (fn [body] (str "<i>do something</i>"
-                                                       body
-                                                       "<i>with the data</i>"))}
+                         :header "vl_db/_design/cas/header.html"
+                         :footer "vl_db/_design/cas/footer.html"
+                         :content "vl_db/_design/cas/index.html"
+                         :data-trans-fn identity}
+
+             :get/js {:db (ig/ref :db/couch)}
+
+             :get/css {:db (ig/ref :db/couch)}
              
-             :routes/app {:get-register (ig/ref :get/register)
+             :routes/app {:db (ig/ref :db/couch)
+                          :get-js (ig/ref :get/js)
+                          :get-css (ig/ref :get/css)
+                          :get-register (ig/ref :get/register)
                           :post-register (ig/ref :post/register)
                           :get-login (ig/ref :get/login)
                           :post-login (ig/ref :post/login)
@@ -91,16 +105,26 @@
 (defmethod ig/init-key :get/index [_ conf]
   (ah/get-index conf))
 
-(defmethod ig/init-key :db/couch [_ {:keys [prot host port usr-path member-path] :as conf}]
+(defmethod ig/init-key :get/js [_ conf]
+  (ah/get-js conf))
+
+(defmethod ig/init-key :get/css [_ conf]
+  (ah/get-css conf))
+
+(defmethod ig/init-key :db/couch [_ {:keys [prot host port usr-path member-path js-path css-path] :as conf}]
   (let [srv (str prot "://" host ":" port "/")]
     (assoc conf
            :srv srv
            :usr-url-fn (fn [usr] (str srv usr-path usr))
-           :member-url (str srv member-path))))
+           :member-url (str srv member-path)
+           :js-url (str srv js-path)
+           :css-url (str srv css-path))))
 
-(defmethod ig/init-key :routes/app [_ {:keys [get-login post-login get-index get-register post-register] :as conf}]
+(defmethod ig/init-key :routes/app [_ {:keys [get-login post-login get-index get-register post-register get-js get-css db] :as conf}]
   (defroutes all-routes
     (GET "/" [] get-index)
+    (GET "/js/:file" [file] get-js)
+    (GET "/css/:file" [file] get-css)
     (GET "/login/" [] get-login)
     (GET "/register/" [] get-register)
     (POST "/register/" [] post-register)

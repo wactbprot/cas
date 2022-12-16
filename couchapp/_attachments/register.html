@@ -1,20 +1,15 @@
-<html>
-  <head><title>CAS Register</title></head>
-  <body>
-    <h1>register.html</h1>
-    <ul>
-      <li><a href="/">Home</a></li>
-      <li><a href="/login/">Sign in</a></li>
-    </ul>
-
-    <form action="/register/" method="post">
-      <label for="username">email:</label>
-      <input type="text" name="email"></input>
-      <label for="password1">password:</label>
-      <input type="password" name="password1"></input>
-      <label for="password2">repeat:</label>
-      <input type="password" name="password2"></input>
-      <input type="submit" value="sign up">
-    </form>
-  </body>
-</html>
+<h1 class="uk-heading-line uk-text-center"><span>Sign Up</span></h1>
+<form class="uk-form-stacked uk-margin-large"  action="/register/" method="post">
+  <div class="uk-margin">
+    <input class="uk-input" type="text" name="email" placeholder="Email"></input>
+  </div>
+  <div class="uk-margin">
+    <input class="uk-input" type="password" name="password1" placeholder="Password"></input>
+  </div>
+  <div class="uk-margin">
+    <input class="uk-input" type="password" name="password2" placeholder="Repeat Password"></input>
+  </div>
+  <div class="uk-margin">
+   <button class="uk-button uk-button-primary">Submit</button> 
+  </div>
+</form>

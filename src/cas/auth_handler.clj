@@ -3,7 +3,7 @@
   (:require
    [clj-http.client :as http]
    [clojure.data.json :as json]
-   [ring.util.response :refer [redirect]]))
+   [ring.util.response :refer [redirect]] ))
 
 ;; ## utils and helper functions
 
@@ -80,6 +80,15 @@
 (defn pass-cookie [req opts]
   (assoc-in opts [:headers :Cookie] (get-in req [:headers "cookie"])))
 
+(defn response-admin [{:keys [header footer content data-trans-fn db]}]
+  (let [{srv :srv} db
+        opts (admin-opts db)
+        header (-> (http/get (str srv header) opts) res->body)
+        content (-> (http/get (str srv content) opts) res->body data-trans-fn)
+        footer (-> (http/get (str srv footer) opts) res->body)]
+    (str header content footer)))
+
+
 ;; ## handler functions 
 
 ;; The register login process works as follows.
@@ -87,11 +96,7 @@
 ;; ### get register
 
 ;; Get the configured register page with admin creds. 
-(defn get-register [{:keys [path db]}]
-  (fn [req]
-    (let [{srv :srv} db]
-      (-> (http/get (str srv path) (admin-opts db))
-          res->body))))
+(defn get-register [conf] (fn [req] (response-admin conf)))
 
 ;; ### get register
 
@@ -110,11 +115,7 @@
 ;; ### get login
 
 ;; Get the configured login page with admin creds. 
-(defn get-login [{:keys [path db]}]
-  (fn [req]
-    (let [{srv :srv opts :opts} db]
-      (-> (http/get (str srv path) (admin-opts db))
-          res->body))))
+(defn get-login [conf] (fn [req] (response-admin conf)))
 
 ;; ### post login
 
@@ -141,3 +142,15 @@
       (if (status-ok? res)
         (data-trans-fn (res->body res))
         (redirect "/login/")))))
+
+(defn get-js [{:keys [db]}]
+  (fn [req]
+    (let [file (-> req :params :file)
+          {url :js-url opts :opts} db]
+      (redirect (str url file)))))
+ 
+(defn get-css [{:keys [db]}]
+  (fn [req]
+    (let [file (-> req :params :file)
+          {url :css-url opts :opts} db]
+      (redirect (str url file)))))
