@@ -122,13 +122,14 @@
 
 (defmethod ig/init-key :routes/app [_ {:keys [get-login post-login get-index get-register post-register get-js get-css db] :as conf}]
   (defroutes all-routes
-    (GET "/" [] get-index)
+ 
     (GET "/js/:file" [file] get-js)
     (GET "/css/:file" [file] get-css)
     (GET "/login/" [] get-login)
     (GET "/register/" [] get-register)
     (POST "/register/" [] post-register)
     (POST "/login/" [] post-login)
+    (GET "/" [] get-index)
     (not-found "<h1>not found</h1>")))
 
 (defmethod ig/init-key :server/app [_ {:keys [backend routes]}]

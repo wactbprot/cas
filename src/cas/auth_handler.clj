@@ -64,6 +64,7 @@
 (defn make-usr-member [{:keys [member-url] :as db} usr]
   (let [opts (admin-opts db)
         members (res->json (http/get member-url opts))
+        ;; only add if not already added
         members (update-in members [:members :names] conj usr)
         opts (assoc opts :body (json/write-str members))]
     (res->json (http/put member-url opts))))
@@ -80,14 +81,25 @@
 (defn pass-cookie [req opts]
   (assoc-in opts [:headers :Cookie] (get-in req [:headers "cookie"])))
 
-(defn response-admin [{:keys [header footer content data-trans-fn db]}]
+
+(defn get-page [{:keys [header footer content data-trans-fn db]} opts]
   (let [{srv :srv} db
-        opts (admin-opts db)
         header (-> (http/get (str srv header) opts) res->body)
         content (-> (http/get (str srv content) opts) res->body data-trans-fn)
         footer (-> (http/get (str srv footer) opts) res->body)]
     (str header content footer)))
 
+(defn response-admin [{:keys [db] :as conf}]
+  (get-page conf (admin-opts db)))
+
+(defn response-user [{:keys [header db] :as conf} req]
+  (let [{srv :srv opts :opts} db
+        opts (pass-cookie req opts)
+        _ (prn opts)
+        res (http/head (str srv header) opts)]
+    (if (status-ok? res)      
+      (get-page conf opts)
+      (redirect "/login/"))))
 
 ;; ## handler functions 
 
@@ -134,14 +146,7 @@
 ;; The request to index `/` is authorised by the session cookie
 ;; passed. The `data-trans-fn` enables the transformation of the data
 ;; received from the database.
-(defn get-index [{:keys [path db data-trans-fn]}]
-  (fn [req]
-    (let [{srv :srv opts :opts} db
-          opts (pass-cookie req opts)
-          res (http/get (str srv path) opts)]
-      (if (status-ok? res)
-        (data-trans-fn (res->body res))
-        (redirect "/login/")))))
+(defn get-index [conf] (fn [req] (response-user conf req)))
 
 (defn get-js [{:keys [db]}]
   (fn [req]
