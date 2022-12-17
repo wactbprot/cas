@@ -95,7 +95,6 @@
 (defn response-user [{:keys [header db] :as conf} req]
   (let [{srv :srv opts :opts} db
         opts (pass-cookie req opts)
-        _ (prn opts)
         res (http/head (str srv header) opts)]
     (if (status-ok? res)      
       (get-page conf opts)
@@ -151,11 +150,12 @@
 (defn get-js [{:keys [db]}]
   (fn [req]
     (let [file (-> req :params :file)
-          {url :js-url opts :opts} db]
-      (redirect (str url file)))))
+          {url :js-url} db]
+      (-> (http/get (str url file) (admin-opts db)) res->body))))
  
 (defn get-css [{:keys [db]}]
+
   (fn [req]
     (let [file (-> req :params :file)
-          {url :css-url opts :opts} db]
-      (redirect (str url file)))))
+          {url :css-url} db]
+      (-> (http/get (str url file) (admin-opts db)) res->body))))

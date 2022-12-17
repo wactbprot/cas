@@ -2,6 +2,9 @@
 
 P="couchapp/_attachments"
 
+mkdir -p $P/css
+mkdir -p $P/js
+
 # css
 curl https://cdn.jsdelivr.net/npm/uikit@3.7.0/dist/css/uikit.min.css -o $P/css/uikit.css
 # js
