@@ -3,7 +3,7 @@
   (:require
    [clj-http.client :as http]
    [clojure.data.json :as json]
-   [ring.util.response :refer [redirect]] ))
+   [ring.util.response :refer [redirect content-type]] ))
 
 ;; ## utils and helper functions
 
@@ -150,12 +150,15 @@
 (defn get-js [{:keys [db]}]
   (fn [req]
     (let [file (-> req :params :file)
-          {url :js-url} db]
-      (-> (http/get (str url file) (admin-opts db)) res->body))))
+          {url :js-url} db
+          res (-> (http/get (str url file) (admin-opts db))
+                  res->body)]
+      (content-type {:body res} "text/javascript"))))
  
 (defn get-css [{:keys [db]}]
-
   (fn [req]
     (let [file (-> req :params :file)
-          {url :css-url} db]
-      (-> (http/get (str url file) (admin-opts db)) res->body))))
+          {url :css-url} db
+          res (-> (http/get (str url file) (admin-opts db))
+                  res->body)]
+          (content-type {:body res} "text/css"))))
