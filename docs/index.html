@@ -2865,14 +2865,14 @@ net.brehaut.ClojureTools = (function (SH) {
     build_tree: build_tree
   };
 })(SyntaxHighlighter);
-</script><title>cas -- Marginalia</title></head><body><table><tr><td class="docs"><div class="header"><h1 class="project-name">cas</h1><h2 class="project-version">0.1.1</h2><br /><p>[clojure|couch] [access|auth] [server|service]</p>
-</div><div class="dependencies"><h2>dependencies</h2><table><tr><td class="dep-name">clojure</td><td class="dotted"><hr /></td><td class="dep-version"><span><small>mvn version&nbsp;&nbsp;</small><i>1.11.1</i></span></td></tr><tr><td class="dep-name">clj-http</td><td class="dotted"><hr /></td><td class="dep-version"><span><small>mvn version&nbsp;&nbsp;</small><i>3.12.3</i></span></td></tr><tr><td class="dep-name">compojure</td><td class="dotted"><hr /></td><td class="dep-version"><span><small>mvn version&nbsp;&nbsp;</small><i>1.6.1</i></span></td></tr><tr><td class="dep-name">data.json</td><td class="dotted"><hr /></td><td class="dep-version"><span><small>mvn version&nbsp;&nbsp;</small><i>2.4.0</i></span></td></tr><tr><td class="dep-name">integrant</td><td class="dotted"><hr /></td><td class="dep-version"><span><small>mvn version&nbsp;&nbsp;</small><i>0.8.0</i></span></td></tr><tr><td class="dep-name">ring-jetty-adapter</td><td class="dotted"><hr /></td><td class="dep-version"><span><small>mvn version&nbsp;&nbsp;</small><i>1.9.6</i></span></td></tr><tr><td class="dep-name">ring-core</td><td class="dotted"><hr /></td><td class="dep-version"><span><small>mvn version&nbsp;&nbsp;</small><i>1.9.6</i></span></td></tr></table></div></td><td class="codes" style="text-align: center; vertical-align: middle;color: #666;padding-right:20px"><br /><br /><br />(this space intentionally left almost blank)</td></tr><tr><td class="docs"><div class="toc"><a name="toc"><h2>namespaces</h2></a><ul><li><a href="#cas.auth-handler">cas.auth-handler</a></li><li><a href="#cas.core">cas.core</a></li></ul></div></td><td class="codes">&nbsp;</td></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#cas.auth-handler" name="cas.auth-handler"><h1 class="project-name">cas.auth-handler</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
+</script><title>cas -- Marginalia</title></head><body><table><tr><td class="docs"><div class="header"><h1 class="project-name">cas</h1><h2 class="project-version">0.2.1</h2><br /><p>[clojure|couch] [access|auth] [server|service]</p>
+</div><div class="dependencies"><h2>dependencies</h2><table><tr><td class="dep-name">clojure</td><td class="dotted"><hr /></td><td class="dep-version"><span><small>mvn version&nbsp;&nbsp;</small><i>1.11.1</i></span></td></tr><tr><td class="dep-name">clj-http</td><td class="dotted"><hr /></td><td class="dep-version"><span><small>mvn version&nbsp;&nbsp;</small><i>3.12.3</i></span></td></tr><tr><td class="dep-name">compojure</td><td class="dotted"><hr /></td><td class="dep-version"><span><small>mvn version&nbsp;&nbsp;</small><i>1.6.1</i></span></td></tr><tr><td class="dep-name">data.json</td><td class="dotted"><hr /></td><td class="dep-version"><span><small>mvn version&nbsp;&nbsp;</small><i>2.4.0</i></span></td></tr><tr><td class="dep-name">integrant</td><td class="dotted"><hr /></td><td class="dep-version"><span><small>mvn version&nbsp;&nbsp;</small><i>0.8.0</i></span></td></tr><tr><td class="dep-name">ring-jetty-adapter</td><td class="dotted"><hr /></td><td class="dep-version"><span><small>mvn version&nbsp;&nbsp;</small><i>1.9.6</i></span></td></tr><tr><td class="dep-name">ring-defaults</td><td class="dotted"><hr /></td><td class="dep-version"><span><small>mvn version&nbsp;&nbsp;</small><i>0.3.4</i></span></td></tr><tr><td class="dep-name">ring-core</td><td class="dotted"><hr /></td><td class="dep-version"><span><small>mvn version&nbsp;&nbsp;</small><i>1.9.6</i></span></td></tr></table></div></td><td class="codes" style="text-align: center; vertical-align: middle;color: #666;padding-right:20px"><br /><br /><br />(this space intentionally left almost blank)</td></tr><tr><td class="docs"><div class="toc"><a name="toc"><h2>namespaces</h2></a><ul><li><a href="#cas.auth-handler">cas.auth-handler</a></li><li><a href="#cas.core">cas.core</a></li></ul></div></td><td class="codes">&nbsp;</td></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#cas.auth-handler" name="cas.auth-handler"><h1 class="project-name">cas.auth-handler</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(ns cas.auth-handler
   ^{:author &quot;Thomas Bock &lt;thomas.bock@ptb.de&gt;&quot;}
   (:require
    [clj-http.client :as http]
    [clojure.data.json :as json]
-   [ring.util.response :refer [redirect]]))</pre></td></tr><tr><td class="docs"><h2>utils and helper functions</h2>
+   [ring.util.response :refer [redirect response content-type]] ))</pre></td></tr><tr><td class="docs"><h2>utils and helper functions</h2>
 </td><td class="codes"></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn status-ok? [{:keys [status body] :as res}] (&lt; status 400))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn res-&gt;body [{:keys [status body] :as res}] (when (status-ok? res) body))</pre></td></tr><tr><td class="docs">
@@ -2880,8 +2880,8 @@ net.brehaut.ClojureTools = (function (SH) {
   (when-let [body (res-&gt;body res)] (json/read-str body :key-fn keyword)))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn admin-opts [{:keys [admin-usr admin-pwd] :as db}]
   (-&gt; db :opts (assoc :basic-auth  [admin-usr admin-pwd])))</pre></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(defn get-allowed-users-doc [{:keys [srv allowed-users-path] :as db}]
-  (-&gt; (http/get (str srv allowed-users-path) (admin-opts db))
+</td><td class="codes"><pre class="brush: clojure">(defn get-allowed-users-doc [{:keys [allowed-users-url] :as db}]
+  (-&gt; (http/get allowed-users-url (admin-opts db))
       res-&gt;json))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn get-allowed-users [db]
   (-&gt; (get-allowed-users-doc db)
@@ -2912,28 +2912,50 @@ can/should be worked out (e.g. regular expression) </p>
     (usr-exist? db email) (assoc :error true
                                  :reason &quot;already registered &lt;a href='/login/'&gt;login&lt;/a&gt;&quot;)
     (not (passwds-ok? pwd1 pwd2 pwd-opts)) (assoc :error true
-                                                  :reason &quot;passwords mismatch &lt;a href='/register/'&gt;register&lt;/a&gt;&quot;))) </pre></td></tr><tr><td class="docs">
+                                                  :reason &quot;passwords mismatch &lt;a href='/register/'&gt;register&lt;/a&gt;&quot;))) </pre></td></tr><tr><td class="docs"><p>For the <code>make-usr-member</code> function it is important that the member
+is only add if not already added</p>
 </td><td class="codes"><pre class="brush: clojure">(defn make-usr-member [{:keys [member-url] :as db} usr]
   (let [opts (admin-opts db)
-        members (res-&gt;json (http/get member-url opts))
-        members (update-in members [:members :names] conj usr)
-        opts (assoc opts :body (json/write-str members))]
-    (res-&gt;json (http/put member-url opts))))</pre></td></tr><tr><td class="docs">
+        members-doc (res-&gt;json (http/get member-url opts))
+        members (get-in members-doc [:members :names])]
+    (when-not (contains? (set members) usr)
+      members-doc (update-in members-doc [:members :names] conj usr)
+      opts (assoc opts :body (json/write-str members-doc))
+      (res-&gt;json (http/put member-url opts)))))</pre></td></tr><tr><td class="docs"><h2>Cookies</h2>
+</td><td class="codes"></td></tr><tr><td class="docs"><p>This functions deal with cookies used to auth the user. The cookie
+is provided by the CouchDB session endpoint.</p>
+</td><td class="codes"></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn res-&gt;cookie [res]
   (when (status-ok? res)
     (-&gt; res :cookies (get &quot;AuthSession&quot;) :value)))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defn get-cookie [{:keys [srv session-path opts] :as db} usr pwd]
   (let [opts (assoc opts :body (json/write-str {:name usr :password pwd}))]
     (-&gt; (http/post (str srv session-path) opts)
-        res-&gt;cookie)))</pre></td></tr><tr><td class="docs"><h2>handler functions</h2>
+        res-&gt;cookie)))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn assoc-cookie [req cookie]
+  (assoc-in req [:headers  &quot;Set-Cookie&quot;] (str &quot;AuthSession=&quot; cookie &quot;; path=/&quot;)))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn pass-cookie [req opts]
+  (assoc-in opts [:headers :Cookie] (get-in req [:headers &quot;cookie&quot;])))</pre></td></tr><tr><td class="docs"><h2>Page Responses</h2>
+</td><td class="codes"></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn get-page [{:keys [header footer content data-trans-fn db]} opts]
+  (let [{db-url :db-url} db
+        header (-&gt; (http/get (str db-url header) opts) res-&gt;body)
+        content (-&gt; (http/get (str db-url content) opts) res-&gt;body data-trans-fn)
+        footer (-&gt; (http/get (str db-url footer) opts) res-&gt;body)]
+    (str header content footer)))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn response-admin [{:keys [db] :as conf}]
+  (get-page conf (admin-opts db)))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn response-user [{:keys [header db] :as conf} req]
+  (let [{db-url :db-url opts :opts} db
+        opts (pass-cookie req opts)
+        res (http/head (str db-url header) opts)]
+    (if (status-ok? res)      
+      (response (get-page conf opts))
+      (redirect &quot;/login/&quot;))))</pre></td></tr><tr><td class="docs"><h2>handler functions</h2>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>The register login process works as follows.</p>
 </td><td class="codes"></td></tr><tr><td class="docs"><h3>get register</h3>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>Get the configured register page with admin creds. </p>
-</td><td class="codes"><pre class="brush: clojure">(defn get-register [{:keys [path db]}]
-  (fn [req]
-    (let [{srv :srv} db]
-      (-&gt; (http/get (str srv path) (admin-opts db))
-          res-&gt;body))))</pre></td></tr><tr><td class="docs"><h3>get register</h3>
+</td><td class="codes"><pre class="brush: clojure">(defn get-register [conf] (fn [req] (response-admin conf)))</pre></td></tr><tr><td class="docs"><h3>get register</h3>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>Username (email address) and password are submited (plain) -> switch on https.
 If the preconditions are ok a user is created and redirected to <code>/login</code>.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn post-register [{:keys [db allowed-users pwd-opts]}]
@@ -2945,29 +2967,39 @@ If the preconditions are ok a user is created and redirected to <code>/login</co
           (str &quot;failed to create user &quot;))
         (str &quot;precondition failed &quot; reason)))))</pre></td></tr><tr><td class="docs"><h3>get login</h3>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>Get the configured login page with admin creds. </p>
-</td><td class="codes"><pre class="brush: clojure">(defn get-login [{:keys [path db]}]
-  (fn [req]
-    (let [{srv :srv opts :opts} db]
-      (-&gt; (http/get (str srv path) (admin-opts db))
-          res-&gt;body))))</pre></td></tr><tr><td class="docs"><h3>post login</h3>
+</td><td class="codes"><pre class="brush: clojure">(defn get-login [conf] (fn [req] (response-admin conf)))</pre></td></tr><tr><td class="docs"><h3>post login</h3>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>Redirect to <code>/</code> and add cookie (success) or <code>/login/</code> (fail) after
-login data are posted.</p>
+login data are posted.
+Important Path: if / the cookies will be sent for all paths</p>
 </td><td class="codes"><pre class="brush: clojure">(defn post-login [{:keys [db]}]
   (fn [{{email &quot;email&quot; pwd &quot;password&quot;} :form-params  :as req}]
-    (if (make-usr-member db email)
-      (if-let [cookie (get-cookie db email pwd)]
-        (assoc (redirect &quot;/&quot;) :Set-Cookie cookie)
-        (redirect &quot;/login/&quot;))
+    (make-usr-member db email)
+    (if-let [cookie (get-cookie db email pwd)]
+      (assoc-cookie (redirect &quot;/&quot;) cookie)
       (redirect &quot;/login/&quot;))))</pre></td></tr><tr><td class="docs"><h3>get index</h3>
-</td><td class="codes"></td></tr><tr><td class="docs"><p>The request to index with auth cookie is piped.</p>
-</td><td class="codes"><pre class="brush: clojure">(defn get-index [{:keys [path db]}]
+</td><td class="codes"></td></tr><tr><td class="docs"><p>The request to index <code>/</code> is authorised by the session cookie
+passed. The <code>data-trans-fn</code> enables the transformation of the data
+received from the database.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn get-index [conf]
   (fn [req]
-    (let [{srv :srv opts :opts} db
-          opts (assoc-in opts [:headers :Cookie] (get-in req [:headers &quot;cookie&quot;]))
-          res (http/get (str srv path) opts)]
-      (if (status-ok? res)
-        (res-&gt;body res)
-        (redirect &quot;/login/&quot;)))))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#cas.core" name="cas.core"><h1 class="project-name">cas.core</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
+    (content-type (response-user conf req)
+                  &quot;Content-Type: text/html; charset=utf-8&quot;)))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn get-js [{:keys [db]}]
+  (fn [req]
+    (let [file (-&gt; req :params :file)
+          {url :js-url} db
+          res (-&gt; (http/get (str url file) (admin-opts db))
+                  res-&gt;body)]
+      (content-type (response res)
+       &quot;text/javascript; charset=utf-8&quot;))))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defn get-css [{:keys [db]}]
+  (fn [req]
+    (let [file (-&gt; req :params :file)
+          {url :css-url} db
+          res (-&gt; (http/get (str url file) (admin-opts db))
+                  res-&gt;body)]
+      (content-type
+       (response res) &quot;text/css; charset=utf-8&quot;))))</pre></td></tr><tr><td class="spacer docs">&nbsp;</td><td class="codes" /></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#cas.core" name="cas.core"><h1 class="project-name">cas.core</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(ns cas.core
   ^{:author &quot;Thomas Bock &lt;thomas.bock@ptb.de&gt;&quot;}
   (:require
@@ -2979,8 +3011,9 @@ login data are posted.</p>
    [integrant.core :as ig]
    [ring.adapter.jetty :refer [run-jetty]]
    [ring.middleware.session :refer [wrap-session]]
+   [ring.middleware.cookies :refer [wrap-cookies]]
    [ring.middleware.params :refer [wrap-params]]
-   [ring.util.codec :refer [url-encode]]))</pre></td></tr><tr><td class="docs"><h2>System `config`uration map</h2>
+   [ring.util.codec :refer [url-encode]]))</pre></td></tr><tr><td class="docs"><h2>System configuration map</h2>
 </td><td class="codes"></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(def config {:db/couch {:opts {:content-type :json
                                :socket-timeout 1000
@@ -2990,24 +3023,41 @@ login data are posted.</p>
                                :pool {:threads 1 :default-per-route 1}}
                         :prot &quot;http&quot;
                         :host &quot;localhost&quot;
+                        :name &quot;vl_db&quot;
                         :port 5984
                         :admin-usr (System/getenv &quot;CAL_USR&quot;)
                         :admin-pwd (System/getenv &quot;CAL_PWD&quot;)
                         :usr-path &quot;_users/org.couchdb.user:&quot;
                         :usr-map {:roles [] :type &quot;user&quot;}
-                        :member-path &quot;vl_db/_security&quot;
-                        :allowed-users-path &quot;vl_db/000_MAINTAINERS&quot;
+                        :js-path &quot;_design/cas/js%2F&quot;
+                        :css-path &quot;_design/cas/css%2F&quot;
+                        :member-path &quot;_security&quot;
+                        :allowed-users-path &quot;000_MAINTAINERS&quot;
                         :session-path &quot;/_session&quot; }
              :get/register {:db (ig/ref :db/couch)
-                            :path &quot;vl_db/_design/cas/register.html&quot;}
+                            :header &quot;_design/cas/header.html&quot;
+                            :footer &quot;_design/cas/footer.html&quot;
+                            :content &quot;_design/cas/register.html&quot;
+                            :data-trans-fn identity}
              :post/register {:db (ig/ref :db/couch)
                              :pwd-opts {:min-length 3}}
              :get/login {:db (ig/ref :db/couch)
-                         :path &quot;vl_db/_design/cas/login.html&quot;}
+                            :header &quot;_design/cas/header.html&quot;
+                            :footer &quot;_design/cas/footer.html&quot;
+                            :content &quot;_design/cas/login.html&quot;
+                            :data-trans-fn identity}
              :post/login {:db (ig/ref :db/couch)}
              :get/index {:db (ig/ref :db/couch)
-                         :path &quot;vl_db/_design/cas/index.html&quot;}
-             :routes/app {:get-register (ig/ref :get/register)
+                         :header &quot;_design/cas/header.html&quot;
+                         :footer &quot;_design/cas/footer.html&quot;
+                         :content &quot;_design/cas/index.html&quot;
+                         :data-trans-fn identity}
+             :get/js {:db (ig/ref :db/couch)}
+             :get/css {:db (ig/ref :db/couch)}
+             :routes/app {:db (ig/ref :db/couch)
+                          :get-js (ig/ref :get/js)
+                          :get-css (ig/ref :get/css)
+                          :get-register (ig/ref :get/register)
                           :post-register (ig/ref :post/register)
                           :get-login (ig/ref :get/login)
                           :post-login (ig/ref :post/login)
@@ -3018,10 +3068,10 @@ login data are posted.</p>
                             :app (ig/ref :server/app)}})</pre></td></tr><tr><td class="docs"><h1>System</h1>
 </td><td class="codes"></td></tr><tr><td class="docs"><p>The entire system is stored in an atom filled
 by <a href="https://github.com/weavejester/integrant">integrant</a></p>
-</td><td class="codes"><pre class="brush: clojure">(defonce system (atom {}))</pre></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(defn sys-map [] (-&gt; system deref))</pre></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(defn app [] (-&gt; (sys-map) :server/app))</pre></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(defn db [] (-&gt;  (sys-map) :db/couch))</pre></td></tr><tr><td class="docs"><h2>system up</h2>
+</td><td class="codes"><pre class="brush: clojure">(defonce system (atom {}))</pre></td></tr><tr><td class="docs"><p>Some helper functions.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn sys-map [] (-&gt; system deref))
+(defn app [] (-&gt; (sys-map) :server/app))
+(defn db [] (-&gt;  (sys-map) :db/couch))</pre></td></tr><tr><td class="docs"><h2>system up</h2>
 </td><td class="codes"></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defmethod ig/init-key :get/login [_ conf]
   (ah/get-login conf))</pre></td></tr><tr><td class="docs">
@@ -3033,23 +3083,36 @@ by <a href="https://github.com/weavejester/integrant">integrant</a></p>
   (ah/post-register conf))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defmethod ig/init-key :get/index [_ conf]
   (ah/get-index conf))</pre></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(defmethod ig/init-key :db/couch [_ {:keys [prot host port usr-path member-path] :as conf}]
-  (let [srv (str prot &quot;://&quot; host &quot;:&quot; port &quot;/&quot;)]
+</td><td class="codes"><pre class="brush: clojure">(defmethod ig/init-key :get/js [_ conf]
+  (ah/get-js conf))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defmethod ig/init-key :get/css [_ conf]
+  (ah/get-css conf))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defmethod ig/init-key :db/couch [_ {:keys [prot host port name usr-path allowed-users-path member-path js-path css-path] :as conf}]
+  (let [srv (str prot &quot;://&quot; host &quot;:&quot; port &quot;/&quot;)
+        db-url (str srv name &quot;/&quot;)]
     (assoc conf
            :srv srv
+           :db-url db-url
+           :allowed-users-url (str db-url &quot;/&quot; allowed-users-path)
            :usr-url-fn (fn [usr] (str srv usr-path usr))
-           :member-url (str srv member-path))))</pre></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(defmethod ig/init-key :routes/app [_ {:keys [get-login post-login get-index get-register post-register] :as conf}]
+           :member-url (str srv member-path)
+           :js-url (str db-url &quot;/&quot; js-path)
+           :css-url (str db-url &quot;/&quot; css-path))))</pre></td></tr><tr><td class="docs">
+</td><td class="codes"><pre class="brush: clojure">(defmethod ig/init-key :routes/app [_ {:keys [get-login post-login get-index get-register post-register get-js get-css db] :as conf}]
   (defroutes all-routes
-    (GET &quot;/&quot; [] get-index)
+ 
+    (GET &quot;/js/:file&quot; [file] get-js)
+    (GET &quot;/css/:file&quot; [file] get-css)
     (GET &quot;/login/&quot; [] get-login)
     (GET &quot;/register/&quot; [] get-register)
     (POST &quot;/register/&quot; [] post-register)
     (POST &quot;/login/&quot; [] post-login)
+    (GET &quot;/&quot; [] get-index)
     (not-found &quot;&lt;h1&gt;not found&lt;/h1&gt;&quot;)))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defmethod ig/init-key :server/app [_ {:keys [backend routes]}]
   (-&gt; routes
-      (wrap-params)))</pre></td></tr><tr><td class="docs">
+      wrap-cookies
+      wrap-params))</pre></td></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(defmethod ig/init-key :server/jetty [_ {:keys [opts app]}]
   (run-jetty app opts))</pre></td></tr><tr><td class="docs"><h2>system down</h2>
 </td><td class="codes"></td></tr><tr><td class="docs">
