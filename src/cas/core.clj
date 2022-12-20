@@ -30,33 +30,33 @@
                         :admin-pwd (System/getenv "CAL_PWD")
                         :usr-path "_users/org.couchdb.user:"
                         :usr-map {:roles [] :type "user"}
-                        :js-path "vl_db/_design/cas/js%2F"
-                        :css-path "vl_db/_design/cas/css%2F"
+                        :js-path "_design/cas/js%2F"
+                        :css-path "_design/cas/css%2F"
                         :member-path "_security"
-                        :allowed-users-path "vl_db/000_MAINTAINERS"
+                        :allowed-users-path "000_MAINTAINERS"
                         :session-path "/_session" }
 
              :get/register {:db (ig/ref :db/couch)
-                            :header "vl_db/_design/cas/header.html"
-                            :footer "vl_db/_design/cas/footer.html"
-                            :content "vl_db/_design/cas/register.html"
+                            :header "_design/cas/header.html"
+                            :footer "_design/cas/footer.html"
+                            :content "_design/cas/register.html"
                             :data-trans-fn identity}
 
              :post/register {:db (ig/ref :db/couch)
                              :pwd-opts {:min-length 3}}
              
              :get/login {:db (ig/ref :db/couch)
-                            :header "vl_db/_design/cas/header.html"
-                            :footer "vl_db/_design/cas/footer.html"
-                            :content "vl_db/_design/cas/login.html"
+                            :header "_design/cas/header.html"
+                            :footer "_design/cas/footer.html"
+                            :content "_design/cas/login.html"
                             :data-trans-fn identity}
 
              :post/login {:db (ig/ref :db/couch)}
 
              :get/index {:db (ig/ref :db/couch)
-                         :header "vl_db/_design/cas/header.html"
-                         :footer "vl_db/_design/cas/footer.html"
-                         :content "vl_db/_design/cas/index.html"
+                         :header "_design/cas/header.html"
+                         :footer "_design/cas/footer.html"
+                         :content "_design/cas/index.html"
                          :data-trans-fn identity}
 
              :get/js {:db (ig/ref :db/couch)}
@@ -113,14 +113,17 @@
 (defmethod ig/init-key :get/css [_ conf]
   (ah/get-css conf))
 
-(defmethod ig/init-key :db/couch [_ {:keys [prot host port name usr-path member-path js-path css-path] :as conf}]
-  (let [srv (str prot "://" host ":" port "/")]
+(defmethod ig/init-key :db/couch [_ {:keys [prot host port name usr-path allowed-users-path member-path js-path css-path] :as conf}]
+  (let [srv (str prot "://" host ":" port "/")
+        db-url (str srv name "/")]
     (assoc conf
            :srv srv
+           :db-url db-url
+           :allowed-users-url (str db-url "/" allowed-users-path)
            :usr-url-fn (fn [usr] (str srv usr-path usr))
            :member-url (str srv member-path)
-           :js-url (str srv js-path)
-           :css-url (str srv css-path))))
+           :js-url (str db-url "/" js-path)
+           :css-url (str db-url "/" css-path))))
 
 (defmethod ig/init-key :routes/app [_ {:keys [get-login post-login get-index get-register post-register get-js get-css db] :as conf}]
   (defroutes all-routes

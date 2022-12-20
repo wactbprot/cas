@@ -17,8 +17,8 @@
 (defn admin-opts [{:keys [admin-usr admin-pwd] :as db}]
   (-> db :opts (assoc :basic-auth  [admin-usr admin-pwd])))
 
-(defn get-allowed-users-doc [{:keys [srv allowed-users-path] :as db}]
-  (-> (http/get (str srv allowed-users-path) (admin-opts db))
+(defn get-allowed-users-doc [{:keys [allowed-users-url] :as db}]
+  (-> (http/get allowed-users-url (admin-opts db))
       res->json))
 
 (defn get-allowed-users [db]
@@ -61,15 +61,21 @@
     (not (passwds-ok? pwd1 pwd2 pwd-opts)) (assoc :error true
                                                   :reason "passwords mismatch <a href='/register/'>register</a>"))) 
 
+;; For the `make-usr-member` function it is important that the member
+;; is only add if not already added
 (defn make-usr-member [{:keys [member-url] :as db} usr]
   (let [opts (admin-opts db)
         members-doc (res->json (http/get member-url opts))
         members (get-in members-doc [:members :names])]
-    ;; only add if not already added
     (when-not (contains? (set members) usr)
       members-doc (update-in members-doc [:members :names] conj usr)
       opts (assoc opts :body (json/write-str members-doc))
       (res->json (http/put member-url opts)))))
+
+;; ## Cookies
+
+;; This functions deal with cookies used to auth the user. The cookie
+;; is provided by the CouchDB session endpoint.
 
 (defn res->cookie [res]
   (when (status-ok? res)
@@ -80,23 +86,28 @@
     (-> (http/post (str srv session-path) opts)
         res->cookie)))
 
+(defn assoc-cookie [req cookie]
+  (assoc-in req [:headers  "Set-Cookie"] (str "AuthSession=" cookie "; path=/")))
+
 (defn pass-cookie [req opts]
   (assoc-in opts [:headers :Cookie] (get-in req [:headers "cookie"])))
 
+;; ## Page Responses
+
 (defn get-page [{:keys [header footer content data-trans-fn db]} opts]
-  (let [{srv :srv} db
-        header (-> (http/get (str srv header) opts) res->body)
-        content (-> (http/get (str srv content) opts) res->body data-trans-fn)
-        footer (-> (http/get (str srv footer) opts) res->body)]
+  (let [{db-url :db-url} db
+        header (-> (http/get (str db-url header) opts) res->body)
+        content (-> (http/get (str db-url content) opts) res->body data-trans-fn)
+        footer (-> (http/get (str db-url footer) opts) res->body)]
     (str header content footer)))
 
 (defn response-admin [{:keys [db] :as conf}]
   (get-page conf (admin-opts db)))
 
 (defn response-user [{:keys [header db] :as conf} req]
-  (let [{srv :srv opts :opts} db
+  (let [{db-url :db-url opts :opts} db
         opts (pass-cookie req opts)
-        res (http/head (str srv header) opts)]
+        res (http/head (str db-url header) opts)]
     (if (status-ok? res)      
       (response (get-page conf opts))
       (redirect "/login/"))))
@@ -133,11 +144,12 @@
 
 ;; Redirect to `/` and add cookie (success) or `/login/` (fail) after
 ;; login data are posted.
+;; Important Path: if / the cookies will be sent for all paths
 (defn post-login [{:keys [db]}]
   (fn [{{email "email" pwd "password"} :form-params  :as req}]
     (make-usr-member db email)
     (if-let [cookie (get-cookie db email pwd)]
-      (assoc-in (redirect "/") [:headers  "Set-Cookie"] (str "AuthSession=" cookie "; path=/"))
+      (assoc-cookie (redirect "/") cookie)
       (redirect "/login/"))))
 
 ;; ### get index
@@ -145,7 +157,10 @@
 ;; The request to index `/` is authorised by the session cookie
 ;; passed. The `data-trans-fn` enables the transformation of the data
 ;; received from the database.
-(defn get-index [conf] (fn [req] (response-user conf req)))
+(defn get-index [conf]
+  (fn [req]
+    (content-type (response-user conf req)
+                  "Content-Type: text/html; charset=utf-8")))
 
 (defn get-js [{:keys [db]}]
   (fn [req]
@@ -153,12 +168,14 @@
           {url :js-url} db
           res (-> (http/get (str url file) (admin-opts db))
                   res->body)]
-      (content-type (response res) "text/javascript"))))
- 
+      (content-type (response res)
+       "text/javascript; charset=utf-8"))))
+
 (defn get-css [{:keys [db]}]
   (fn [req]
     (let [file (-> req :params :file)
           {url :css-url} db
           res (-> (http/get (str url file) (admin-opts db))
                   res->body)]
-          (content-type (response res) "text/css"))))
+      (content-type
+       (response res) "text/css; charset=utf-8"))))
