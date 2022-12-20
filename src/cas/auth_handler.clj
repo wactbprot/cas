@@ -137,10 +137,7 @@
   (fn [{{email "email" pwd "password"} :form-params  :as req}]
     (make-usr-member db email)
     (if-let [cookie (get-cookie db email pwd)]
-      (do (prn cookie)
-          {:status 302,
-           :path "/"
-           :headers {"Location" "/" "Set-Cookie" (str "AuthSession=" cookie "; path=/")}}) 
+      (assoc-in (redirect "/") [:headers  "Set-Cookie"] (str "AuthSession=" cookie "; path=/"))
       (redirect "/login/"))))
 
 ;; ### get index
@@ -148,10 +145,7 @@
 ;; The request to index `/` is authorised by the session cookie
 ;; passed. The `data-trans-fn` enables the transformation of the data
 ;; received from the database.
-(defn get-index [conf] (fn [req]
-                         (prn req)
-                         (response "kkk")
-                         #_(response-user conf req)))
+(defn get-index [conf] (fn [req] (response-user conf req)))
 
 (defn get-js [{:keys [db]}]
   (fn [req]
