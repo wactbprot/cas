@@ -3,7 +3,7 @@
   (:require
    [clj-http.client :as http]
    [clojure.data.json :as json]
-   [ring.util.response :refer [redirect content-type]] ))
+   [ring.util.response :refer [redirect response content-type]] ))
 
 ;; ## utils and helper functions
 
@@ -63,11 +63,13 @@
 
 (defn make-usr-member [{:keys [member-url] :as db} usr]
   (let [opts (admin-opts db)
-        members (res->json (http/get member-url opts))
-        ;; only add if not already added
-        members (update-in members [:members :names] conj usr)
-        opts (assoc opts :body (json/write-str members))]
-    (res->json (http/put member-url opts))))
+        members-doc (res->json (http/get member-url opts))
+        members (get-in members-doc [:members :names])]
+    ;; only add if not already added
+    (when-not (contains? (set members) usr)
+      members-doc (update-in members-doc [:members :names] conj usr)
+      opts (assoc opts :body (json/write-str members-doc))
+      (res->json (http/put member-url opts)))))
 
 (defn res->cookie [res]
   (when (status-ok? res)
@@ -80,7 +82,6 @@
 
 (defn pass-cookie [req opts]
   (assoc-in opts [:headers :Cookie] (get-in req [:headers "cookie"])))
-
 
 (defn get-page [{:keys [header footer content data-trans-fn db]} opts]
   (let [{srv :srv} db
@@ -97,7 +98,7 @@
         opts (pass-cookie req opts)
         res (http/head (str srv header) opts)]
     (if (status-ok? res)      
-      (get-page conf opts)
+      (response (get-page conf opts))
       (redirect "/login/"))))
 
 ;; ## handler functions 
@@ -134,10 +135,12 @@
 ;; login data are posted.
 (defn post-login [{:keys [db]}]
   (fn [{{email "email" pwd "password"} :form-params  :as req}]
-    (if (make-usr-member db email)
-      (if-let [cookie (get-cookie db email pwd)]
-        (assoc (redirect "/") :Set-Cookie cookie)
-        (redirect "/login/"))
+    (make-usr-member db email)
+    (if-let [cookie (get-cookie db email pwd)]
+      (do (prn cookie)
+          {:status 302,
+           :path "/"
+           :headers {"Location" "/" "Set-Cookie" (str "AuthSession=" cookie "; path=/")}}) 
       (redirect "/login/"))))
 
 ;; ### get index
@@ -145,7 +148,10 @@
 ;; The request to index `/` is authorised by the session cookie
 ;; passed. The `data-trans-fn` enables the transformation of the data
 ;; received from the database.
-(defn get-index [conf] (fn [req] (response-user conf req)))
+(defn get-index [conf] (fn [req]
+                         (prn req)
+                         (response "kkk")
+                         #_(response-user conf req)))
 
 (defn get-js [{:keys [db]}]
   (fn [req]
@@ -153,7 +159,7 @@
           {url :js-url} db
           res (-> (http/get (str url file) (admin-opts db))
                   res->body)]
-      (content-type {:body res} "text/javascript"))))
+      (content-type (response res) "text/javascript"))))
  
 (defn get-css [{:keys [db]}]
   (fn [req]
@@ -161,4 +167,4 @@
           {url :css-url} db
           res (-> (http/get (str url file) (admin-opts db))
                   res->body)]
-          (content-type {:body res} "text/css"))))
+          (content-type (response res) "text/css"))))

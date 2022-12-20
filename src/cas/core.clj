@@ -9,6 +9,7 @@
    [integrant.core :as ig]
    [ring.adapter.jetty :refer [run-jetty]]
    [ring.middleware.session :refer [wrap-session]]
+   [ring.middleware.cookies :refer [wrap-cookies]]
    [ring.middleware.params :refer [wrap-params]]
    [ring.util.codec :refer [url-encode]]))
 
@@ -23,6 +24,7 @@
                                :pool {:threads 1 :default-per-route 1}}
                         :prot "http"
                         :host "localhost"
+                        :name "vl_db"
                         :port 5984
                         :admin-usr (System/getenv "CAL_USR")
                         :admin-pwd (System/getenv "CAL_PWD")
@@ -30,7 +32,7 @@
                         :usr-map {:roles [] :type "user"}
                         :js-path "vl_db/_design/cas/js%2F"
                         :css-path "vl_db/_design/cas/css%2F"
-                        :member-path "vl_db/_security"
+                        :member-path "_security"
                         :allowed-users-path "vl_db/000_MAINTAINERS"
                         :session-path "/_session" }
 
@@ -111,7 +113,7 @@
 (defmethod ig/init-key :get/css [_ conf]
   (ah/get-css conf))
 
-(defmethod ig/init-key :db/couch [_ {:keys [prot host port usr-path member-path js-path css-path] :as conf}]
+(defmethod ig/init-key :db/couch [_ {:keys [prot host port name usr-path member-path js-path css-path] :as conf}]
   (let [srv (str prot "://" host ":" port "/")]
     (assoc conf
            :srv srv
@@ -134,7 +136,8 @@
 
 (defmethod ig/init-key :server/app [_ {:keys [backend routes]}]
   (-> routes
-      (wrap-params)))
+      wrap-cookies
+      wrap-params))
 
 (defmethod ig/init-key :server/jetty [_ {:keys [opts app]}]
   (run-jetty app opts))
